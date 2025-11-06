@@ -884,27 +884,13 @@ swift build -c release
 If you use Plaid Swift in your research, please cite:
 
 ```bibtex
-@software{plaid_swift,
-  title = {Plaid Swift: Native Semantic Search for iOS and macOS},
-  author = {Your Name},
-  year = {2024},
-  url = {https://github.com/your-org/plaid-swift}
+@software{plaid,
+  title = {Plaid: Native Semantic Search for iOS and macOS},
+  author = {Sachin Desai},
+  year = {2025},
+  url = {https://github.com/smdesai/plaid}
 }
 ```
-
----
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-org/plaid-swift/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/plaid-swift/discussions)
-- **Documentation**: [API Docs](https://your-org.github.io/plaid-swift)
 
 ---
 
