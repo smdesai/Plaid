@@ -82,6 +82,61 @@ public struct QueryResult: Codable, Sendable {
     }
 }
 
+/// Caches extracted arrays from MLX tensors to avoid repeated conversions
+/// during search operations. This provides significant performance improvements
+/// by eliminating redundant asArray() calls in hot paths.
+private struct CachedSearchArtifacts {
+    let centroidValues: [Float]
+    let bucketWeightsArray: [Float]?
+    let byteMapArray: [Int]
+    let bucketLookupArray: [Int]?
+    let centroidCount: Int
+    let embeddingDim: Int
+    let codecNBits: Int
+    let numBuckets: Int
+    let keysPerByte: Int
+    let bucketWeightsShape: [Int]
+
+    /// Creates cached artifacts from index artifacts
+    static func from(artifacts: IndexArtifacts, codecArtifacts: CodecArtifacts)
+        -> CachedSearchArtifacts?
+    {
+        let centroidTensor = artifacts.centroids
+        let centroidValues = centroidTensor.asArray(Float.self)
+        let centroidCount = centroidTensor.shape[0]
+        let embeddingDim = artifacts.embeddingDim
+
+        guard embeddingDim > 0, centroidCount > 0 else {
+            return nil
+        }
+
+        let bucketWeightsArray: [Float]? = artifacts.bucketWeights?.asArray(Float.self)
+        let byteMapArray = codecArtifacts.byteReversedBitsMap.asArray(Int.self)
+        let bucketLookupArray = codecArtifacts.bucketWeightLookup?.asArray(Int.self)
+
+        let codecNBits = artifacts.nbits
+        guard codecNBits > 0 && codecNBits <= 8 else {
+            return nil
+        }
+        let numBuckets = 1 << codecNBits
+        let keysPerByte = max(1, 8 / codecNBits)
+        let bucketWeightsShape = artifacts.bucketWeights?.shape ?? []
+
+        return CachedSearchArtifacts(
+            centroidValues: centroidValues,
+            bucketWeightsArray: bucketWeightsArray,
+            byteMapArray: byteMapArray,
+            bucketLookupArray: bucketLookupArray,
+            centroidCount: centroidCount,
+            embeddingDim: embeddingDim,
+            codecNBits: codecNBits,
+            numBuckets: numBuckets,
+            keysPerByte: keysPerByte,
+            bucketWeightsShape: bucketWeightsShape
+        )
+    }
+}
+
 private struct PersistedIndex: Codable {
     let embeddingDim: Int
     let nbits: Int
@@ -123,6 +178,32 @@ private final class PlaidIndexCache {
     }
 
     func store(_ value: PlaidIndex, for key: CacheKey) {
+        queue.async(flags: .barrier) {
+            self.cache[key] = value
+        }
+    }
+
+    func clear(for path: String) {
+        queue.async(flags: .barrier) {
+            self.cache = self.cache.filter { $0.key.path != path }
+        }
+    }
+}
+
+private final class SearchArtifactsCache {
+    static let shared = SearchArtifactsCache()
+
+    private var cache: [CacheKey: CachedSearchArtifacts] = [:]
+    private let queue = DispatchQueue(
+        label: "plaid.search_artifacts_cache", attributes: .concurrent)
+
+    func value(for key: CacheKey) -> CachedSearchArtifacts? {
+        queue.sync {
+            cache[key]
+        }
+    }
+
+    func store(_ value: CachedSearchArtifacts, for key: CacheKey) {
         queue.async(flags: .barrier) {
             self.cache[key] = value
         }
@@ -207,6 +288,7 @@ public enum Plaid {
         try persist(summary: summary, at: indexURL)
 
         PlaidIndexCache.shared.clear(for: cachePath(indexURL))
+        SearchArtifactsCache.shared.clear(for: cachePath(indexURL))
     }
 
     public static func update(
@@ -219,6 +301,10 @@ public enum Plaid {
         guard !embeddings.isEmpty else {
             return
         }
+
+        // Acquire lock to prevent concurrent modifications
+        let lock = try IndexLock.acquire(for: indexURL)
+        defer { lock.release() }
 
         let summary = try loadSummary(from: indexURL)
         let artifacts = try IndexStorage.loadArtifacts(from: indexURL)
@@ -251,6 +337,7 @@ public enum Plaid {
 
         try persist(summary: updatedSummary, at: indexURL)
         PlaidIndexCache.shared.clear(for: cachePath(indexURL))
+        SearchArtifactsCache.shared.clear(for: cachePath(indexURL))
     }
 
     public static func update(
@@ -317,12 +404,31 @@ public enum Plaid {
         }
 
         if let artifacts = index.artifacts {
+            // Try to get cached search artifacts, or create and cache them
+            let cachedArtifacts: CachedSearchArtifacts
+            if let cached = SearchArtifactsCache.shared.value(for: key) {
+                cachedArtifacts = cached
+            } else {
+                guard
+                    let created = CachedSearchArtifacts.from(
+                        artifacts: artifacts,
+                        codecArtifacts: artifacts.codecArtifacts
+                    )
+                else {
+                    return try runLegacySearch(
+                        index: index, queries: queries, params: searchParameters, subset: subset)
+                }
+                cachedArtifacts = created
+                SearchArtifactsCache.shared.store(cachedArtifacts, for: key)
+            }
+
             return try runSearch(
                 artifacts: artifacts,
                 summary: index,
                 queries: queries,
                 params: searchParameters,
-                subset: subset
+                subset: subset,
+                cachedArtifacts: cachedArtifacts
             )
         }
 
@@ -362,6 +468,10 @@ public enum Plaid {
             return
         }
 
+        // Acquire lock to prevent concurrent modifications
+        let lock = try IndexLock.acquire(for: indexURL)
+        defer { lock.release() }
+
         let summary = try loadSummary(from: indexURL)
         let validIds = Set(subset.filter { $0 >= 0 && $0 < summary.docLengths.count })
         guard !validIds.isEmpty else { return }
@@ -385,6 +495,7 @@ public enum Plaid {
         )
         try persist(summary: updatedSummary, at: indexURL)
         PlaidIndexCache.shared.clear(for: cachePath(indexURL))
+        SearchArtifactsCache.shared.clear(for: cachePath(indexURL))
     }
 
     public static func delete(
@@ -734,6 +845,15 @@ extension Plaid {
                     filteredCodes.append(codes[idx])
                     let byteStart = idx * bytesPerResidual
                     let byteEnd = byteStart + bytesPerResidual
+
+                    // Bounds validation for residual byte slicing
+                    guard byteEnd <= residualBytes.count else {
+                        throw PlaidError.invalidEmbeddingDimensions(
+                            expected: byteEnd,
+                            actual: residualBytes.count
+                        )
+                    }
+
                     filteredResiduals.append(contentsOf: residualBytes[byteStart ..< byteEnd])
                 }
             }
@@ -866,45 +986,31 @@ extension Plaid {
         summary: PlaidIndex,
         queries: [[[Float]]],
         params: SearchParameters,
-        subset: [[Int]]?
+        subset: [[Int]]?,
+        cachedArtifacts: CachedSearchArtifacts
     ) throws -> [QueryResult] {
         var scalarDecompressTime: Double = 0
         var scalarDocs = 0
         var vectorDecompressTime: Double = 0
         var vectorDocs = 0
 
-        let centroidTensor = artifacts.centroids
-        let centroidValues = centroidTensor.asArray(Float32.self).map { Float($0) }
-        let centroidCount = centroidTensor.shape[0]
-        let embeddingDim = artifacts.embeddingDim
+        // Use cached values instead of extracting from tensors
+        let centroidValues = cachedArtifacts.centroidValues
+        let centroidCount = cachedArtifacts.centroidCount
+        let embeddingDim = cachedArtifacts.embeddingDim
+        let bucketWeightsArray = cachedArtifacts.bucketWeightsArray
+        let byteMapArray = cachedArtifacts.byteMapArray
+        let bucketLookupArray = cachedArtifacts.bucketLookupArray
+        let codecNBits = cachedArtifacts.codecNBits
+        let numBuckets = cachedArtifacts.numBuckets
+        let keysPerByte = cachedArtifacts.keysPerByte
+        let bucketWeightsShape = cachedArtifacts.bucketWeightsShape
 
-        guard embeddingDim > 0, centroidCount > 0 else {
-            return try runLegacySearch(
-                index: summary, queries: queries, params: params, subset: subset)
-        }
-
-        let bucketWeightsArray: [Float]? = artifacts.bucketWeights?.asArray(Float32.self).map {
-            Float($0)
-        }
         let embeddingOffsets = artifacts.embeddingOffsets
         let docLengths = artifacts.docLengths
         let bytesPerResidual = artifacts.bytesPerResidual
         let residualCount = artifacts.residuals.count
         let codes = artifacts.codes
-
-        let codecNBits = artifacts.nbits
-        guard codecNBits > 0 && codecNBits <= 8 else {
-            return try runLegacySearch(
-                index: summary, queries: queries, params: params, subset: subset)
-        }
-        let numBuckets = 1 << codecNBits
-        let codecArtifacts = artifacts.codecArtifacts
-        let byteMapArray = codecArtifacts.byteReversedBitsMap.asArray(Int32.self).map { Int($0) }
-        let bucketLookupArray = codecArtifacts.bucketWeightLookup?.asArray(Int32.self).map {
-            Int($0)
-        }
-        let keysPerByte = max(1, 8 / codecNBits)
-        let bucketWeightsShape = artifacts.bucketWeights?.shape ?? []
 
         var results: [QueryResult] = []
         results.reserveCapacity(queries.count)
@@ -1155,6 +1261,7 @@ extension Plaid {
             [docLen]
         ).asType(.int32, stream: stream)
         let centroidsGathered = artifacts.centroids.take(codesTensor, axis: 0, stream: stream)
+        eval(centroidsGathered)  // Checkpoint: Materialize centroid lookup
 
         let byteMap = artifacts.codecArtifacts.byteReversedBitsMap.asType(.int32, stream: stream)
         let flatResidualIndices = residualTensor.flattened(stream: stream)
@@ -1162,6 +1269,7 @@ extension Plaid {
             .int32, stream: stream)
         let packedDim = bytesPerResidual
         let reversedCodes = reversedFlat.reshaped([docLen, packedDim], stream: stream)
+        eval(reversedCodes)  // Checkpoint: Materialize byte reversal operations
         let flatCombinationIndices = reversedCodes.flattened(stream: stream)
 
         let lookupSize = bucketLookupRaw.shape.reduce(1, *)
@@ -1177,6 +1285,7 @@ extension Plaid {
             [docLen, packedDim, keysPerByte],
             stream: stream
         )
+        eval(selectedBuckets)  // Checkpoint: Materialize bucket lookup
 
         let dimensionSequence = (0 ..< embeddingDim).map { Float32($0) }
         let dimensionBase = MLXArray(dimensionSequence, [embeddingDim])
@@ -1200,8 +1309,10 @@ extension Plaid {
             stream: stream
         )
         let residualMatrix = residualWeights.reshaped([docLen, embeddingDim], stream: stream)
+        eval(residualMatrix)  // Checkpoint: Materialize residual weight computation
 
         let docMatrix = (centroidsGathered + residualMatrix).asType(.float32, stream: stream)
+        eval(docMatrix)  // Checkpoint: Materialize final matrix before extraction
         let docValues = docMatrix.asArray(Float32.self)
         var normalized: [Float32] = []
         normalized.reserveCapacity(docLen * embeddingDim)

@@ -42,76 +42,47 @@ public struct TokenSplitter: SentenceChunker {
     public func chunk(for sentence: String, chunkSize: Int = 180, overlapSize: Int = 64) -> [String]
     {
         let whitespace = CharacterSet.whitespacesAndNewlines
-        if sentence.isEmpty || sentence.trimmingCharacters(in: whitespace).isEmpty {
+        guard !sentence.trimmingCharacters(in: whitespace).isEmpty else {
             return []
         }
 
-        let chunkSize = min(chunkSize, 180)
+        let effectiveChunkSize = min(chunkSize, 180)
+        let effectiveOverlap = min(overlapSize, effectiveChunkSize - 1)
         let tokens = tokenizer.tokenize(text: sentence)
 
+        guard !tokens.isEmpty else { return [] }
+
         var chunks: [String] = []
+        var position = 0
 
-        // Initialize a counter for the number of chunks
-        var numChunks = 0
+        // Process tokens in sliding windows with overlap
+        while position < tokens.count {
+            // Calculate chunk boundaries
+            let end = min(position + effectiveChunkSize, tokens.count)
+            let chunkTokens = Array(tokens[position ..< end])
 
-        // Create a variable to store the remaining tokens
-        var remainingTokens = tokens
+            // Convert tokens to text
+            var chunkText = tokenizer.detokenize(tokens: chunkTokens)
 
-        // Loop until all tokens are consumed
-        while !remainingTokens.isEmpty {
-            // Take the first chunkSize tokens as a chunk
-            let chunk = Array(remainingTokens.prefix(chunkSize))
-
-            // Decode the chunk into text
-            let chunkText = tokenizer.detokenize(tokens: chunk)
-
-            // Skip the chunk if it is empty or whitespace
-            if chunkText.isEmpty || chunkText.trimmingCharacters(in: whitespace).isEmpty {
-                // Remove the tokens corresponding to the chunk text from the remaining tokens
-                remainingTokens.removeFirst(chunk.count)
-                // Continue to the next iteration of the loop
+            // Skip empty chunks
+            guard !chunkText.trimmingCharacters(in: whitespace).isEmpty else {
+                position = end
                 continue
             }
 
-            // Find the last period or punctuation mark in the chunk
-            let punctuationMarks: [Character] = [".", "?", "!", "\n"]
-            let lastPunctuation =
-                punctuationMarks.compactMap {
-                    chunkText.lastIndex(of: $0)?.utf16Offset(in: chunkText)
-                }.max() ?? -1
-
-            var chunkTextToAppend = chunkText
-
-            // If there is a punctuation mark
-            if lastPunctuation != -1 {
-                // Ensure the index is within the chunkText bounds
-                let safeIndex = min(chunkText.count - 1, lastPunctuation + 1)
-                // Truncate the chunk text at the punctuation mark
-                chunkTextToAppend = String(
-                    chunkText[..<chunkText.index(chunkText.startIndex, offsetBy: safeIndex)])
-            }
-
-            // Remove any newline characters and strip any leading or trailing whitespace
-            chunkTextToAppend = chunkTextToAppend.replacingOccurrences(of: "\n", with: " ")
+            // Normalize whitespace and clean up
+            chunkText = chunkText.replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: whitespace)
 
-            // Append the chunk text to the list of chunks
-            chunks.append(chunkTextToAppend)
+            // Only append non-empty chunks
+            if !chunkText.isEmpty {
+                chunks.append(chunkText)
+            }
 
-            // Remove the tokens corresponding to the chunk text from the remaining tokens
-            remainingTokens.removeFirst(tokenizer.tokenize(text: chunkTextToAppend).count)
-
-            // Increment the number of chunks
-            numChunks += 1
-        }
-
-        // Handle the remaining tokens
-        if !remainingTokens.isEmpty {
-            let remainingText = tokenizer.detokenize(tokens: remainingTokens).replacingOccurrences(
-                of: "\n", with: " "
-            ).trimmingCharacters(in: whitespace)
-
-            chunks.append(remainingText)
+            // Move position forward with overlap
+            // Step size = chunkSize - overlap (ensures overlap between consecutive chunks)
+            let step = max(1, effectiveChunkSize - effectiveOverlap)
+            position += step
         }
 
         return chunks

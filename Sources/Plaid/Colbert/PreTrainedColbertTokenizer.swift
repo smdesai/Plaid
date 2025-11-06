@@ -61,7 +61,8 @@ public class PreTrainedColbertTokenizer: TokenizerProtocol {
             ?? tokenizer.convertTokenToId("[unused1]")
             ?? 2
         self.queryPadTokenId = tokenizer.convertTokenToId("<|im_end|>") ?? 0
-        self.docPadTokenId = tokenizer.convertTokenToId("<|pad|>") ?? 0
+        //self.docPadTokenId = tokenizer.convertTokenToId("<|pad|>") ?? 0
+        self.docPadTokenId = tokenizer.convertTokenToId("<|im_end|>") ?? 0
     }
 
     public func tokenize(text: String) -> [String] {

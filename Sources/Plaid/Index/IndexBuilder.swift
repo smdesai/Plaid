@@ -284,17 +284,17 @@ extension IndexBuilder {
     }
 
     func writeCodec(codec: ResidualCodec, paths: IndexPaths) throws {
-        let centroids = codec.centroids.asArray(Float32.self).map { Float($0) }
+        let centroids = codec.centroids.asArray(Float.self)
         try BinaryIO.writeFloat32(centroids, to: paths.centroids())
 
-        let avgResidual = codec.avgResidual.asArray(Float32.self).map { Float($0) }
+        let avgResidual = codec.avgResidual.asArray(Float.self)
         try BinaryIO.writeFloat32(avgResidual, to: paths.avgResidual())
 
-        if let cutoffs = codec.bucketCutoffs?.asArray(Float32.self) {
-            try BinaryIO.writeFloat32(cutoffs.map { Float($0) }, to: paths.bucketCutoffs())
+        if let cutoffs = codec.bucketCutoffs?.asArray(Float.self) {
+            try BinaryIO.writeFloat32(cutoffs, to: paths.bucketCutoffs())
         }
-        if let weights = codec.bucketWeights?.asArray(Float32.self) {
-            try BinaryIO.writeFloat32(weights.map { Float($0) }, to: paths.bucketWeights())
+        if let weights = codec.bucketWeights?.asArray(Float.self) {
+            try BinaryIO.writeFloat32(weights, to: paths.bucketWeights())
         }
 
         try CodecSerialization.save(codec: codec, paths: paths)
@@ -352,7 +352,9 @@ extension IndexBuilder {
         let codes = codesTensor.asArray(Int32.self)
 
         let gathered = codec.centroids.take(codesTensor, axis: 0, stream: stream)
+        eval(gathered)  // Checkpoint: Materialize centroid gathering
         let residualTensor = embeddingsTensor - gathered
+        eval(residualTensor)  // Checkpoint: Materialize residuals before packing
         let residualValues = residualTensor.asArray(Float32.self)
 
         let packedResiduals = packResiduals(

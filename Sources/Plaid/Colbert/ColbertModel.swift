@@ -49,13 +49,16 @@ public struct ColbertModel {
 
     private let generator: ColbertEmbeddingGenerator
     private var config: Configuration
+    private let chunker: SentenceChunker?
 
     public init(
         generator: ColbertEmbeddingGenerator,
-        configuration: Configuration
+        configuration: Configuration,
+        chunker: SentenceChunker? = nil
     ) {
         self.generator = generator
         self.config = configuration
+        self.chunker = chunker
     }
 
     public var batchSize: Int {
@@ -64,13 +67,29 @@ public struct ColbertModel {
     }
 
     /// Encodes a single query or document into ColBERT embeddings.
+    ///
+    /// For large documents, this method automatically chunks the text using the configured
+    /// `SentenceChunker` and processes each chunk independently, concatenating the results.
+    /// Queries are never chunked as they are designed to be short.
     public func encode(sentence: String, isQuery: Bool) throws -> [[Float]] {
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ColbertModelError.emptyInput }
 
+        // Queries are never chunked - they're short by design
+        // Documents without a chunker use the original single-pass encoding
+        guard !isQuery, let chunker = chunker else {
+            return try encodeSinglePass(trimmed, isQuery: isQuery)
+        }
+
+        // For documents with a chunker: intelligently split and process each chunk
+        return try encodeWithChunking(trimmed, chunker: chunker)
+    }
+
+    /// Encodes text in a single pass without chunking (original behavior).
+    private func encodeSinglePass(_ text: String, isQuery: Bool) throws -> [[Float]] {
         let maxLength = isQuery ? config.queryLength : config.documentLength
         let generated = try generator.generateEmbeddings(
-            for: trimmed,
+            for: text,
             isQuery: isQuery,
             maxLength: maxLength
         )
@@ -82,6 +101,54 @@ public struct ColbertModel {
             attentionMask: generated.attentionMask,
             isQuery: isQuery
         )
+    }
+
+    /// Encodes large documents by chunking them intelligently and concatenating embeddings.
+    private func encodeWithChunking(_ text: String, chunker: SentenceChunker) throws -> [[Float]] {
+        // Split document into manageable chunks using smart punctuation-aware splitting
+        let chunks = chunker.chunk(
+            for: text,
+            chunkSize: config.documentLength,
+            overlapSize: 64  // Overlap helps maintain context across chunk boundaries
+        )
+
+        guard !chunks.isEmpty else {
+            throw ColbertModelError.emptyInput
+        }
+
+        print("📄 Document chunking: split into \(chunks.count) chunk(s)")
+
+        // Process each chunk independently and concatenate all embeddings
+        var allEmbeddings: [[Float]] = []
+        allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)  // Estimate
+
+        for (index, chunk) in chunks.enumerated() {
+            guard !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue  // Skip empty chunks
+            }
+
+            let preview = chunk.prefix(60)
+            print(
+                "  Chunk \(index + 1)/\(chunks.count): \"\(preview)\(chunk.count > 60 ? "..." : "")\""
+            )
+
+            let chunkEmbeddings = try encodeSinglePass(chunk, isQuery: false)
+            allEmbeddings.append(contentsOf: chunkEmbeddings)
+
+            print(
+                "    → Encoded \(chunkEmbeddings.count) tokens, total: \(allEmbeddings.count) embeddings"
+            )
+        }
+
+        guard !allEmbeddings.isEmpty else {
+            throw ColbertModelError.emptyInput
+        }
+
+        print(
+            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(chunks.count) chunk(s)"
+        )
+
+        return allEmbeddings
     }
 
     /// Computes the ColBERT similarity score for a single query/document pair.

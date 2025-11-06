@@ -38,14 +38,16 @@ final class PlaidTests: XCTestCase {
 
     private static let packageRoot: URL = {
         var url = URL(fileURLWithPath: #filePath)
-        for _ in 0 ..< 5 {
+        print("Package root: \(url.path)")
+        for _ in 0 ..< 3 {
             url.deleteLastPathComponent()
         }
+        print("Final Package root: \(url.path)")
         return url
     }()
 
     private static let metallibSource: URL = {
-        packageRoot.appendingPathComponent("swift/Plaid/default.metallib")
+        packageRoot.appendingPathComponent("default.metallib")
     }()
 
     private static let metallibDestination: URL = {

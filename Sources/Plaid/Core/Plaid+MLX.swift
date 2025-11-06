@@ -140,17 +140,17 @@
         }
         let rows = Int(shape[0])
         let cols = Int(shape[1])
-        let values = array.asArray(Float32.self)
+        let values = array.asArray(Float.self)
         guard values.count == rows * cols else {
             throw PlaidError.invalidSubset("Array buffer size mismatch")
         }
 
-        var result: [[Float]] = Array(repeating: [Float](repeating: 0, count: cols), count: rows)
+        var result: [[Float]] = []
+        result.reserveCapacity(rows)
         for row in 0 ..< rows {
             let start = row * cols
             let end = start + cols
-            let slice = values[start ..< end]
-            result[row] = slice.map { Float($0) }
+            result.append(Array(values[start ..< end]))
         }
         return result
     }
@@ -164,29 +164,24 @@
         let batches = Int(shape[0])
         let tokens = Int(shape[1])
         let dim = Int(shape[2])
-        let values = array.asArray(Float32.self)
+        let values = array.asArray(Float.self)
         guard values.count == batches * tokens * dim else {
             throw PlaidError.invalidSubset("Array buffer size mismatch")
         }
 
-        var result: [[[Float]]] = Array(
-            repeating: Array(
-                repeating: [Float](repeating: 0, count: dim),
-                count: tokens
-            ),
-            count: batches
-        )
+        var result: [[[Float]]] = []
+        result.reserveCapacity(batches)
 
-        var cursor = 0
         for batch in 0 ..< batches {
+            var batchResult: [[Float]] = []
+            batchResult.reserveCapacity(tokens)
+
             for token in 0 ..< tokens {
-                var vector = [Float](repeating: 0, count: dim)
-                for component in 0 ..< dim {
-                    vector[component] = Float(values[cursor])
-                    cursor += 1
-                }
-                result[batch][token] = vector
+                let start = (batch * tokens + token) * dim
+                let end = start + dim
+                batchResult.append(Array(values[start ..< end]))
             }
+            result.append(batchResult)
         }
         return result
     }

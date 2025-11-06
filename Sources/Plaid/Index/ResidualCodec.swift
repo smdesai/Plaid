@@ -147,6 +147,7 @@ struct ResidualCodecTrainer {
         )
         let gathered = centroids.take(codes.asType(.int32, stream: stream), axis: 0, stream: stream)
         let residual = samples - gathered
+        eval(residual)  // Checkpoint: Materialize residual before statistics
         let avgResidual = residual.abs(stream: stream).mean(axes: [0], stream: stream)
 
         let (cutoffs, weights) = computeQuantiles(residual: residual)
@@ -168,29 +169,31 @@ struct ResidualCodecTrainer {
         let cutQuantiles = (1 ..< numBuckets).map { Float($0) / Float(numBuckets) }
         let weightQuantiles = (0 ..< numBuckets).map { (Float($0) + 0.5) / Float(numBuckets) }
 
+        // Flatten all residual values (across all dimensions) to match Rust implementation
         let residualValues = residual.asArray(Float32.self)
-        let shape = residual.shape
-        let rows = shape[0]
-        let dim = shape[1]
+        var allValues = residualValues.map { Float($0) }
+        allValues.sort()
 
-        var cutoffs: [Float] = Array(repeating: 0, count: (numBuckets - 1) * dim)
-        var weights: [Float] = Array(repeating: 0, count: numBuckets * dim)
+        // Compute quantiles on the GLOBAL pool of residual values
+        let cutoffValues = quantiles(sorted: allValues, probs: cutQuantiles)
+        let weightValues = quantiles(sorted: allValues, probs: weightQuantiles)
 
-        for d in 0 ..< dim {
-            var column: [Float] = Array(repeating: 0, count: rows)
-            for r in 0 ..< rows {
-                column[r] = Float(residualValues[r * dim + d])
+        let dim = residual.shape[1]
+
+        // Create broadcasted arrays (same value for all dimensions)
+        var cutoffs: [Float] = []
+        cutoffs.reserveCapacity((numBuckets - 1) * dim)
+        for cutoff in cutoffValues {
+            for _ in 0 ..< dim {
+                cutoffs.append(cutoff)
             }
-            column.sort()
+        }
 
-            let cutoffValues = quantiles(sorted: column, probs: cutQuantiles)
-            let weightValues = quantiles(sorted: column, probs: weightQuantiles)
-
-            for (idx, value) in cutoffValues.enumerated() {
-                cutoffs[idx * dim + d] = value
-            }
-            for (idx, value) in weightValues.enumerated() {
-                weights[idx * dim + d] = value
+        var weights: [Float] = []
+        weights.reserveCapacity(numBuckets * dim)
+        for weight in weightValues {
+            for _ in 0 ..< dim {
+                weights.append(weight)
             }
         }
 

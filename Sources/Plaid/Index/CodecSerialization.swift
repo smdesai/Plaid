@@ -14,18 +14,18 @@ enum CodecSerialization {
         stream: StreamOrDevice = .default
     ) throws {
         try BinaryIO.writeInt32(
-            codec.bitHelper.asArray(Int32.self).map { Int32($0) },
+            codec.bitHelper.asArray(Int32.self),
             to: paths.bitHelper()
         )
 
         try BinaryIO.writeInt32(
-            codec.byteReversedBitsMap.asArray(Int32.self).map { Int32($0) },
+            codec.byteReversedBitsMap.asArray(Int32.self),
             to: paths.byteReversedBitsMap()
         )
 
         if let lookup = codec.bucketWeightIndicesLookup {
             try BinaryIO.writeInt32(
-                lookup.asArray(Int32.self).map { Int32($0) },
+                lookup.asArray(Int32.self),
                 to: paths.bucketWeightLookup()
             )
         }
