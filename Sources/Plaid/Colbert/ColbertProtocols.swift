@@ -19,11 +19,34 @@ public struct ColbertEmbeddingBatch {
 /// Different backends (MLX, Core ML, Metal, etc.) can conform to this protocol
 /// to supply token-level embeddings alongside their attention masks.
 public protocol ColbertEmbeddingGenerator {
+    /// Generate embeddings for a single sentence
     func generateEmbeddings(
         for sentence: String,
         isQuery: Bool,
         maxLength: Int
     ) throws -> ColbertEmbeddingBatch
+
+    /// Generate embeddings for multiple sentences in a single batch (more efficient)
+    /// Default implementation falls back to single-sentence processing
+    func generateEmbeddingsBatch(
+        for sentences: [String],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> [ColbertEmbeddingBatch]
+}
+
+/// Default implementation processes sentences individually
+/// Conformers should override with batched implementation for better performance
+extension ColbertEmbeddingGenerator {
+    public func generateEmbeddingsBatch(
+        for sentences: [String],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> [ColbertEmbeddingBatch] {
+        try sentences.map { sentence in
+            try generateEmbeddings(for: sentence, isQuery: isQuery, maxLength: maxLength)
+        }
+    }
 }
 
 /// Defines how input sentences are chunked before encoding.

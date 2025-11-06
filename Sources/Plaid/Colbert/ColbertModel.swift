@@ -123,30 +123,82 @@ public struct ColbertModel {
 
         print("✅ Document chunked: \(chunks.count) chunk(s) created")
 
+        // Use batched processing for large documents (>100 chunks)
+        if chunks.count > 100 {
+            return try encodeChunksBatched(chunks)
+        }
+
         // Process each chunk independently and concatenate all embeddings
         var allEmbeddings: [[Float]] = []
         allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)  // Estimate
 
-        let showProgress = chunks.count > 100
-        var lastReportedPercent = 0
-
-        for (index, chunk) in chunks.enumerated() {
+        for chunk in chunks {
             guard !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 continue  // Skip empty chunks
             }
 
             let chunkEmbeddings = try encodeSinglePass(chunk, isQuery: false)
             allEmbeddings.append(contentsOf: chunkEmbeddings)
+        }
 
-            // Show progress for large documents
-            if showProgress {
-                let percentComplete = ((index + 1) * 100) / chunks.count
-                if percentComplete >= lastReportedPercent + 10 {
-                    print(
-                        "   Encoding progress: \(percentComplete)% (\(index + 1)/\(chunks.count) chunks)"
-                    )
-                    lastReportedPercent = percentComplete
-                }
+        guard !allEmbeddings.isEmpty else {
+            throw ColbertModelError.emptyInput
+        }
+
+        print(
+            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(chunks.count) chunk(s)"
+        )
+
+        return allEmbeddings
+    }
+
+    /// Process chunks in batches for optimal performance
+    private func encodeChunksBatched(_ chunks: [String]) throws -> [[Float]] {
+        var allEmbeddings: [[Float]] = []
+        allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)
+
+        let batchSize = config.batchSize  // Use configured batch size (default 32)
+        let totalBatches = (chunks.count + batchSize - 1) / batchSize
+
+        var lastReportedPercent = 0
+
+        for batchIndex in 0 ..< totalBatches {
+            let startIdx = batchIndex * batchSize
+            let endIdx = min(startIdx + batchSize, chunks.count)
+            let batchChunks = Array(chunks[startIdx ..< endIdx])
+
+            // Filter empty chunks
+            let validChunks = batchChunks.filter {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+
+            guard !validChunks.isEmpty else { continue }
+
+            // Process entire batch in single model call
+            let batchResults = try generator.generateEmbeddingsBatch(
+                for: validChunks,
+                isQuery: false,
+                maxLength: config.documentLength
+            )
+
+            // Process each result
+            for generated in batchResults {
+                let processed = try processBatch(
+                    generated.embeddings,
+                    attentionMask: generated.attentionMask,
+                    isQuery: false
+                )
+                allEmbeddings.append(contentsOf: processed)
+            }
+
+            // Show progress
+            let percentComplete = ((batchIndex + 1) * 100) / totalBatches
+            if percentComplete >= lastReportedPercent + 10 {
+                let chunksProcessed = endIdx
+                print(
+                    "   Encoding progress: \(percentComplete)% (\(chunksProcessed)/\(chunks.count) chunks) [batch \(batchIndex + 1)/\(totalBatches)]"
+                )
+                lastReportedPercent = percentComplete
             }
         }
 

@@ -88,6 +88,89 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         return ColbertEmbeddingBatch(embeddings: embeddings, attentionMask: boolMask)
     }
 
+    /// Batch processing: encode multiple sentences in a single model pass
+    /// Uses CoreML's predictions(inputs:) API for true batch processing
+    public func generateEmbeddingsBatch(
+        for sentences: [String],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> [ColbertEmbeddingBatch] {
+        guard !sentences.isEmpty else { return [] }
+
+        // Single sentence - use standard path
+        if sentences.count == 1 {
+            return try [
+                generateEmbeddings(for: sentences[0], isQuery: isQuery, maxLength: maxLength)
+            ]
+        }
+
+        let effectiveLength = min(maxLength, maxSequenceLength)
+        let padTokenId =
+            isQuery ? tokenizer.queryPadTokenIdentifier : tokenizer.docPadTokenIdentifier
+
+        // Build individual inputs for each sentence
+        var batchInputs: [MLDictionaryFeatureProvider] = []
+        var allAttentionMasks: [[Int]] = []
+        batchInputs.reserveCapacity(sentences.count)
+        allAttentionMasks.reserveCapacity(sentences.count)
+
+        for sentence in sentences {
+            let inputIds = tokenizer.buildModelTokens(sentence: sentence, isQuery: isQuery)
+
+            var attentionMask: [Int] = []
+            attentionMask.reserveCapacity(inputIds.count)
+            for (idx, token) in inputIds.enumerated() {
+                let withinAllowedLength = idx < effectiveLength
+                attentionMask.append((withinAllowedLength && token != padTokenId) ? 1 : 0)
+            }
+
+            // Skip masking for prefix tokens ([BOS], [Q]/[D])
+            for index in 2 ..< min(effectiveLength, inputIds.count) {
+                if skiplistTokenIds.contains(inputIds[index]) {
+                    attentionMask[index] = 0
+                }
+            }
+
+            // Create individual MLMultiArray for this sentence
+            let inputIdsArray = try MLMultiArray.makeInt32Batch(values: inputIds)
+            let attentionArray = try MLMultiArray.makeInt32Batch(values: attentionMask)
+
+            let input = try MLDictionaryFeatureProvider(dictionary: [
+                "input_ids": MLFeatureValue(multiArray: inputIdsArray),
+                "attention_mask": MLFeatureValue(multiArray: attentionArray),
+            ])
+
+            batchInputs.append(input)
+            allAttentionMasks.append(attentionMask)
+        }
+
+        // Use predictions(from:options:) for batch processing - CoreML handles batching!
+        let batchProvider = MLArrayBatchProvider(array: batchInputs)
+        let predictions = try model.predictions(from: batchProvider, options: MLPredictionOptions())
+
+        // Extract embeddings from batch predictions
+        var results: [ColbertEmbeddingBatch] = []
+        results.reserveCapacity(predictions.count)
+
+        for index in 0 ..< predictions.count {
+            let prediction = predictions.features(at: index)
+            guard
+                let tokenEmbeddings = prediction.featureValue(for: "token_embeddings")?
+                    .multiArrayValue
+            else {
+                throw LFM2ColbertGeneratorError.missingOutput("token_embeddings")
+            }
+
+            let validTokenCount = max(allAttentionMasks[index].reduce(0, +), 1)
+            let embeddings = Self.extractEmbeddings(from: tokenEmbeddings, limit: validTokenCount)
+            let boolMask = Array(allAttentionMasks[index].prefix(validTokenCount)).map { $0 != 0 }
+
+            results.append(ColbertEmbeddingBatch(embeddings: embeddings, attentionMask: boolMask))
+        }
+
+        return results
+    }
+
     private static func locateModelURL() throws -> URL {
         #if SWIFT_PACKAGE
             if let compiled = Bundle.module.url(
