@@ -7,7 +7,6 @@
         public static func create(
             indexURL: URL,
             torchPath: String? = nil,
-            device: String,
             embeddingDim: Int,
             nbits: Int,
             embeddings: [MLXArray],
@@ -20,7 +19,6 @@
             try create(
                 indexURL: indexURL,
                 torchPath: torchPath,
-                device: device,
                 embeddingDim: embeddingDim,
                 nbits: nbits,
                 embeddings: matrices,
@@ -33,7 +31,6 @@
         public static func create(
             indexPath: String,
             torchPath: String? = nil,
-            device: String,
             embeddingDim: Int,
             nbits: Int,
             embeddings: [MLXArray],
@@ -44,7 +41,6 @@
             try create(
                 indexURL: URL(fileURLWithPath: indexPath),
                 torchPath: torchPath,
-                device: device,
                 embeddingDim: embeddingDim,
                 nbits: nbits,
                 embeddings: embeddings,
@@ -57,7 +53,6 @@
         public static func update(
             indexURL: URL,
             torchPath: String? = nil,
-            device: String,
             embeddings: [MLXArray],
             batchSize: Int
         ) throws {
@@ -65,7 +60,6 @@
             try update(
                 indexURL: indexURL,
                 torchPath: torchPath,
-                device: device,
                 embeddings: matrices,
                 batchSize: batchSize
             )
@@ -74,14 +68,12 @@
         public static func update(
             indexPath: String,
             torchPath: String? = nil,
-            device: String,
             embeddings: [MLXArray],
             batchSize: Int
         ) throws {
             try update(
                 indexURL: URL(fileURLWithPath: indexPath),
                 torchPath: torchPath,
-                device: device,
                 embeddings: embeddings,
                 batchSize: batchSize
             )
@@ -90,7 +82,6 @@
         public static func loadAndSearch(
             indexURL: URL,
             torchPath: String? = nil,
-            device: String,
             queries: MLXArray,
             searchParameters: SearchParameters,
             showProgress: Bool,
@@ -101,7 +92,6 @@
             return try loadAndSearch(
                 indexURL: indexURL,
                 torchPath: torchPath,
-                device: device,
                 queries: queryArrays,
                 searchParameters: searchParameters,
                 showProgress: showProgress,
@@ -113,7 +103,6 @@
         public static func loadAndSearch(
             indexPath: String,
             torchPath: String? = nil,
-            device: String,
             queries: MLXArray,
             searchParameters: SearchParameters,
             showProgress: Bool,
@@ -123,7 +112,6 @@
             try loadAndSearch(
                 indexURL: URL(fileURLWithPath: indexPath),
                 torchPath: torchPath,
-                device: device,
                 queries: queries,
                 searchParameters: searchParameters,
                 showProgress: showProgress,

@@ -167,7 +167,6 @@ enum PlaidCLI {
 
         let results = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,
@@ -213,7 +212,6 @@ enum PlaidCLI {
 
         try Plaid.create(
             indexURL: indexURL,
-            device: "cpu",
             embeddingDim: embeddingDim,
             nbits: nbits,
             embeddings: initialDocs,
@@ -237,7 +235,6 @@ enum PlaidCLI {
 
         let beforeUpdate = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,
@@ -253,14 +250,12 @@ enum PlaidCLI {
 
         try Plaid.update(
             indexURL: indexURL,
-            device: "cpu",
             embeddings: newDocs,
             batchSize: 64
         )
 
         let afterUpdate = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,
@@ -636,7 +631,6 @@ enum PlaidCLI {
 
         try Plaid.create(
             indexURL: indexURL,
-            device: "cpu",
             embeddingDim: 128,
             nbits: nbits,
             embeddings: documentEmbeddings,
@@ -663,7 +657,6 @@ enum PlaidCLI {
 
         let results = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
@@ -844,7 +837,6 @@ enum PlaidCLI {
 
         let results = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
@@ -1245,7 +1237,6 @@ enum PlaidCLI {
         do {
             try Plaid.update(
                 indexURL: indexURL,
-                device: "cpu",
                 embeddings: allEmbeddings,
                 batchSize: batchSize
             )
@@ -1393,7 +1384,6 @@ enum PlaidCLI {
         do {
             try Plaid.delete(
                 indexURL: indexURL,
-                device: "cpu",
                 subset: uniqueIds
             )
             print("✅ Deletion complete!")

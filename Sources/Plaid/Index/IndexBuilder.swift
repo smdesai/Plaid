@@ -23,8 +23,7 @@ struct IndexBuilder {
         batchSize: Int,
         seed: UInt64?,
         documents: [[[Float]]],
-        centroids: [[Float]],
-        device: String? = nil
+        centroids: [[Float]]
     ) {
         self.outputURL = outputURL
         self.embeddingDim = embeddingDim
@@ -34,12 +33,7 @@ struct IndexBuilder {
         self.documents = documents
         self.centroids = centroids
 
-        // Use CPU stream if device is "cpu", otherwise use default
-        if device == "cpu" {
-            self.stream = .cpu
-        } else {
-            self.stream = .default
-        }
+        self.stream = .default
     }
 
     func build() throws -> IndexBuildResult {

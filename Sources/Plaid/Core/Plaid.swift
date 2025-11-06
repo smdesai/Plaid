@@ -162,7 +162,6 @@ private struct PlaidIndex {
 
 private struct CacheKey: Hashable {
     let path: String
-    let device: String
 }
 
 private final class PlaidIndexCache {
@@ -226,7 +225,6 @@ public enum Plaid {
     public static func create(
         indexPath: String,
         torchPath: String? = nil,
-        device: String,
         embeddingDim: Int,
         nbits: Int,
         embeddings: [[[Float]]],
@@ -237,7 +235,6 @@ public enum Plaid {
         try create(
             indexURL: URL(fileURLWithPath: indexPath),
             torchPath: torchPath,
-            device: device,
             embeddingDim: embeddingDim,
             nbits: nbits,
             embeddings: embeddings,
@@ -250,7 +247,6 @@ public enum Plaid {
     public static func create(
         indexURL: URL,
         torchPath: String? = nil,
-        device: String,
         embeddingDim: Int,
         nbits: Int,
         embeddings: [[[Float]]],
@@ -273,8 +269,7 @@ public enum Plaid {
             batchSize: batchSize,
             seed: seed,
             documents: embeddings,
-            centroids: centroids,
-            device: device
+            centroids: centroids
         )
 
         let buildResult = try builder.build()
@@ -295,7 +290,6 @@ public enum Plaid {
     public static func update(
         indexURL: URL,
         torchPath: String? = nil,
-        device: String,
         embeddings: [[[Float]]],
         batchSize: Int
     ) throws {
@@ -344,14 +338,12 @@ public enum Plaid {
     public static func update(
         indexPath: String,
         torchPath: String? = nil,
-        device: String,
         embeddings: [[[Float]]],
         batchSize: Int
     ) throws {
         try update(
             indexURL: URL(fileURLWithPath: indexPath),
             torchPath: torchPath,
-            device: device,
             embeddings: embeddings,
             batchSize: batchSize
         )
@@ -359,10 +351,9 @@ public enum Plaid {
 
     public static func preloadIndex(
         indexURL: URL,
-        torchPath: String? = nil,
-        device: String
+        torchPath: String? = nil
     ) throws {
-        let key = CacheKey(path: cachePath(indexURL), device: device)
+        let key = CacheKey(path: cachePath(indexURL))
         if PlaidIndexCache.shared.value(for: key) != nil {
             return
         }
@@ -372,27 +363,24 @@ public enum Plaid {
 
     public static func preloadIndex(
         indexPath: String,
-        torchPath: String? = nil,
-        device: String
+        torchPath: String? = nil
     ) throws {
         try preloadIndex(
             indexURL: URL(fileURLWithPath: indexPath),
-            torchPath: torchPath,
-            device: device
+            torchPath: torchPath
         )
     }
 
     public static func loadAndSearch(
         indexURL: URL,
         torchPath: String? = nil,
-        device: String,
         queries: [[[Float]]],
         searchParameters: SearchParameters,
         showProgress: Bool,
         preloadIndex: Bool,
         subset: [[Int]]? = nil
     ) throws -> [QueryResult] {
-        let key = CacheKey(path: cachePath(indexURL), device: device)
+        let key = CacheKey(path: cachePath(indexURL))
         let index: PlaidIndex
 
         if preloadIndex, let cached = PlaidIndexCache.shared.value(for: key) {
@@ -440,7 +428,6 @@ public enum Plaid {
     public static func loadAndSearch(
         indexPath: String,
         torchPath: String? = nil,
-        device: String,
         queries: [[[Float]]],
         searchParameters: SearchParameters,
         showProgress: Bool,
@@ -450,7 +437,6 @@ public enum Plaid {
         try loadAndSearch(
             indexURL: URL(fileURLWithPath: indexPath),
             torchPath: torchPath,
-            device: device,
             queries: queries,
             searchParameters: searchParameters,
             showProgress: showProgress,
@@ -462,7 +448,6 @@ public enum Plaid {
     public static func delete(
         indexURL: URL,
         torchPath: String? = nil,
-        device: String,
         subset: [Int]
     ) throws {
         guard !subset.isEmpty else {
@@ -502,13 +487,11 @@ public enum Plaid {
     public static func delete(
         indexPath: String,
         torchPath: String? = nil,
-        device: String,
         subset: [Int]
     ) throws {
         try delete(
             indexURL: URL(fileURLWithPath: indexPath),
             torchPath: torchPath,
-            device: device,
             subset: subset
         )
     }

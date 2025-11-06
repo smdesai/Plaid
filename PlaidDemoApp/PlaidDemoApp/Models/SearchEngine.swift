@@ -135,7 +135,6 @@ class SearchEngine: ObservableObject {
         print("💾 Creating Plaid index...")
         try Plaid.create(
             indexURL: indexURL,
-            device: "cpu",
             embeddingDim: embeddingDim,
             nbits: nbits,
             embeddings: allEmbeddings,
@@ -190,7 +189,6 @@ class SearchEngine: ObservableObject {
 
         let results = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
