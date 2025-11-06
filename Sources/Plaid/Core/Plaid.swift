@@ -273,7 +273,8 @@ public enum Plaid {
             batchSize: batchSize,
             seed: seed,
             documents: embeddings,
-            centroids: centroids
+            centroids: centroids,
+            device: device
         )
 
         let buildResult = try builder.build()

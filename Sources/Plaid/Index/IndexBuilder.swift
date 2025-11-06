@@ -14,7 +14,33 @@ struct IndexBuilder {
     let seed: UInt64?
     let documents: [[[Float]]]
     let centroids: [[Float]]
-    let stream: StreamOrDevice = .default
+    let stream: StreamOrDevice
+
+    init(
+        outputURL: URL,
+        embeddingDim: Int,
+        nbits: Int,
+        batchSize: Int,
+        seed: UInt64?,
+        documents: [[[Float]]],
+        centroids: [[Float]],
+        device: String? = nil
+    ) {
+        self.outputURL = outputURL
+        self.embeddingDim = embeddingDim
+        self.nbits = nbits
+        self.batchSize = batchSize
+        self.seed = seed
+        self.documents = documents
+        self.centroids = centroids
+
+        // Use CPU stream if device is "cpu", otherwise use default
+        if device == "cpu" {
+            self.stream = .cpu
+        } else {
+            self.stream = .default
+        }
+    }
 
     func build() throws -> IndexBuildResult {
         let (preparedDocs, docVectors, docLengths) = try prepareDocuments()

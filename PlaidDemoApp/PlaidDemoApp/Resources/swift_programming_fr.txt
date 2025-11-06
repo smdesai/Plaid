@@ -1,0 +1,130 @@
+Guide de Programmation Swift
+
+Swift est un langage de programmation puissant et intuitif développé par Apple pour créer des applications pour iOS, macOS, watchOS et tvOS. Écrire du code Swift est interactif et amusant, la syntaxe est concise mais expressive, et Swift inclut des fonctionnalités modernes que les développeurs adorent.
+
+Débuter avec Swift
+
+Swift fournit une syntaxe propre et cohérente qui rend le code plus facile à lire et à écrire. Les variables sont déclarées en utilisant var pour les valeurs mutables et let pour les constantes. Le système de types aide à détecter les erreurs au moment de la compilation, rendant votre code plus sûr et plus fiable.
+
+Gestion des Erreurs dans Swift
+
+La gestion des erreurs dans Swift est construite autour du protocole Error. Vous pouvez lancer, attraper et propager des erreurs dans toute votre application. La syntaxe do-catch fournit une façon claire de gérer les erreurs :
+
+do {
+    let resultat = try operationRisquee()
+    print(resultat)
+} catch {
+    print("Une erreur s'est produite : \(error)")
+}
+
+Vous pouvez également utiliser try? pour convertir les erreurs en valeurs optionnelles, ou try! lorsque vous êtes certain qu'une opération ne échouera pas. Cependant, utilisez try! avec parcimonie car cela fera planter votre application si une erreur se produit.
+
+Optionnels et Sécurité
+
+Les optionnels sont l'une des fonctionnalités de sécurité les plus importantes de Swift. Un optionnel représente une valeur qui pourrait être nil. Vous déballez les optionnels en utilisant if let, guard let ou le chaînage optionnel. Cela aide à prévenir les exceptions de pointeur nul qui affligent de nombreux autres langages.
+
+Par exemple :
+if let nom = nomOptionnel {
+    print("Bonjour, \(nom)")
+} else {
+    print("Le nom est nil")
+}
+
+Protocoles et Programmation Orientée Protocole
+
+Swift met l'accent sur la programmation orientée protocole. Les protocoles définissent un plan de méthodes, propriétés et autres exigences. Les types peuvent se conformer à plusieurs protocoles, offrant une grande flexibilité. Les extensions de protocole vous permettent de fournir des implémentations par défaut, rendant votre code plus réutilisable.
+
+protocol Dessinable {
+    func dessiner()
+}
+
+extension Dessinable {
+    func dessiner() {
+        print("Dessin de la forme")
+    }
+}
+
+Génériques pour la Sécurité des Types
+
+Les génériques vous permettent d'écrire des fonctions et types flexibles et réutilisables qui peuvent fonctionner avec n'importe quel type. La bibliothèque standard de Swift utilise largement les génériques. Les tableaux, dictionnaires et optionnels sont tous implémentés en utilisant des génériques.
+
+func echanger<T>(_ a: inout T, _ b: inout T) {
+    let temp = a
+    a = b
+    b = temp
+}
+
+Gestion de la Mémoire
+
+Swift utilise le Comptage Automatique de Références (ARC) pour gérer la mémoire. ARC libère automatiquement la mémoire utilisée par les instances de classe lorsqu'elles ne sont plus nécessaires. Cependant, vous devez être conscient des cycles de références fortes. Utilisez des références weak et unowned pour briser les cycles et prévenir les fuites de mémoire.
+
+Closures et Listes de Capture
+
+Les closures sont des blocs de fonctionnalité autonomes qui peuvent être transmis et utilisés dans votre code. Elles sont similaires aux lambdas dans d'autres langages. Les closures peuvent capturer et stocker des références à des variables et constantes de leur contexte environnant.
+
+Faites attention aux cycles de rétention lorsque les closures capturent self. Utilisez des listes de capture comme [weak self] ou [unowned self] pour prévenir les fuites de mémoire :
+
+quelqueMethode { [weak self] in
+    self?.fairQuelqueChose()
+}
+
+Async/Await pour la Concurrence
+
+Swift moderne inclut async/await pour gérer le code asynchrone. Cela rend le code asynchrone plus facile à lire et à écrire, remplaçant les gestionnaires de complétion par un code d'apparence séquentielle.
+
+func recupererDonnees() async throws -> Data {
+    let (donnees, _) = try await URLSession.shared.data(from: url)
+    return donnees
+}
+
+Task {
+    let donnees = try await recupererDonnees()
+    print(donnees)
+}
+
+SwiftUI pour les Interfaces Modernes
+
+SwiftUI est le framework déclaratif d'Apple pour construire des interfaces utilisateur. Au lieu de décrire impérativement comment construire votre interface, vous déclarez à quoi votre interface devrait ressembler pour différents états. SwiftUI gère la mise à jour de l'interface lorsque l'état change.
+
+struct VueContenu: View {
+    @State private var compteur = 0
+
+    var body: some View {
+        VStack {
+            Text("Compteur : \(compteur)")
+            Button("Incrémenter") {
+                compteur += 1
+            }
+        }
+    }
+}
+
+Property Wrappers
+
+Les property wrappers ajoutent une couche de séparation entre le code qui gère comment une propriété est stockée et le code qui définit une propriété. Les property wrappers SwiftUI courants incluent @State, @Binding, @ObservedObject et @EnvironmentObject.
+
+@State est utilisé pour les types de valeur simples appartenant à la vue. @Binding crée une connexion bidirectionnelle à une valeur appartenant ailleurs. @ObservedObject est pour les types de référence qui se conforment à ObservableObject.
+
+Tests dans Swift
+
+Swift fournit un excellent support de test via XCTest. Écrivez des tests unitaires pour vérifier des fonctions individuelles et des tests d'intégration pour vérifier que les composants fonctionnent correctement ensemble. SwiftUI prend également en charge les tests d'interface via XCUITest.
+
+func testAddition() {
+    XCTAssertEqual(2 + 2, 4)
+}
+
+Meilleures Pratiques
+
+Suivez les conventions de nommage de Swift : utilisez camelCase pour les variables et fonctions, PascalCase pour les types. Gardez les fonctions petites et concentrées. Utilisez les instructions guard pour les retours anticipés. Préférez les types de valeur (structs) aux types de référence (classes) lorsque possible. Utilisez des extensions pour organiser votre code.
+
+Gérez toujours les erreurs de manière appropriée plutôt que de les ignorer silencieusement. Utilisez les optionnels correctement et évitez le déballage forcé à moins d'être absolument certain qu'une valeur existe. Documentez vos API publiques avec des commentaires.
+
+Considérations de Performance
+
+Swift est conçu pour être rapide. Cependant, vous devez toujours être conscient des performances. Utilisez des types de valeur pour éviter l'allocation de tas lorsque possible. Faites attention aux opérations de collection qui créent de nouvelles copies. Profilez votre code avec Instruments pour identifier les goulots d'étranglement.
+
+Pour les tâches intensives en calcul, envisagez d'utiliser le traitement concurrent avec async/await ou GCD. L'évaluation paresseuse peut aider à différer les calculs coûteux jusqu'à ce qu'ils soient réellement nécessaires.
+
+Conclusion
+
+Swift est un langage moderne, sûr et expressif qui rend le développement iOS et macOS agréable. Son système de types fort, la gestion des optionnels, la conception orientée protocole et les fonctionnalités modernes de concurrence en font un excellent choix pour le développement d'applications. Continuez à apprendre et à expérimenter avec les fonctionnalités de Swift pour devenir un développeur plus efficace.

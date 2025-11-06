@@ -1,0 +1,130 @@
+Swift Programming Guide
+
+Swift is a powerful and intuitive programming language developed by Apple for building apps for iOS, macOS, watchOS, and tvOS. Writing Swift code is interactive and fun, the syntax is concise yet expressive, and Swift includes modern features developers love.
+
+Getting Started with Swift
+
+Swift provides a clean and consistent syntax that makes code easier to read and write. Variables are declared using var for mutable values and let for constants. The type system helps catch errors at compile time, making your code safer and more reliable.
+
+Error Handling in Swift
+
+Error handling in Swift is built around the Error protocol. You can throw, catch, and propagate errors throughout your application. The do-catch syntax provides a clear way to handle errors:
+
+do {
+    let result = try riskyOperation()
+    print(result)
+} catch {
+    print("An error occurred: \(error)")
+}
+
+You can also use try? to convert errors to optional values, or try! when you're certain an operation won't fail. However, use try! sparingly as it will crash your app if an error does occur.
+
+Optionals and Safety
+
+Optionals are one of Swift's most important safety features. An optional represents a value that might be nil. You unwrap optionals using if let, guard let, or optional chaining. This helps prevent null pointer exceptions that plague many other languages.
+
+For example:
+if let name = optionalName {
+    print("Hello, \(name)")
+} else {
+    print("Name is nil")
+}
+
+Protocols and Protocol-Oriented Programming
+
+Swift emphasizes protocol-oriented programming. Protocols define a blueprint of methods, properties, and other requirements. Types can conform to multiple protocols, providing great flexibility. Protocol extensions allow you to provide default implementations, making your code more reusable.
+
+protocol Drawable {
+    func draw()
+}
+
+extension Drawable {
+    func draw() {
+        print("Drawing the shape")
+    }
+}
+
+Generics for Type Safety
+
+Generics enable you to write flexible, reusable functions and types that can work with any type. Swift's standard library makes extensive use of generics. Arrays, dictionaries, and optionals are all implemented using generics.
+
+func swap<T>(_ a: inout T, _ b: inout T) {
+    let temp = a
+    a = b
+    b = temp
+}
+
+Memory Management
+
+Swift uses Automatic Reference Counting (ARC) to manage memory. ARC automatically frees up memory used by class instances when they're no longer needed. However, you need to be aware of strong reference cycles. Use weak and unowned references to break cycles and prevent memory leaks.
+
+Closures and Capture Lists
+
+Closures are self-contained blocks of functionality that can be passed around and used in your code. They're similar to lambdas in other languages. Closures can capture and store references to variables and constants from their surrounding context.
+
+Be careful with retain cycles when closures capture self. Use capture lists like [weak self] or [unowned self] to prevent memory leaks:
+
+someMethod { [weak self] in
+    self?.doSomething()
+}
+
+Async/Await for Concurrency
+
+Modern Swift includes async/await for handling asynchronous code. This makes asynchronous code easier to read and write, replacing completion handlers with sequential-looking code.
+
+func fetchData() async throws -> Data {
+    let (data, _) = try await URLSession.shared.data(from: url)
+    return data
+}
+
+Task {
+    let data = try await fetchData()
+    print(data)
+}
+
+SwiftUI for Modern UIs
+
+SwiftUI is Apple's declarative framework for building user interfaces. Instead of imperatively describing how to build your UI, you declare what your UI should look like for different states. SwiftUI handles updating the UI when state changes.
+
+struct ContentView: View {
+    @State private var count = 0
+
+    var body: some View {
+        VStack {
+            Text("Count: \(count)")
+            Button("Increment") {
+                count += 1
+            }
+        }
+    }
+}
+
+Property Wrappers
+
+Property wrappers add a layer of separation between code that manages how a property is stored and code that defines a property. Common SwiftUI property wrappers include @State, @Binding, @ObservedObject, and @EnvironmentObject.
+
+@State is used for simple value types owned by the view. @Binding creates a two-way connection to a value owned elsewhere. @ObservedObject is for reference types that conform to ObservableObject.
+
+Testing in Swift
+
+Swift provides excellent testing support through XCTest. Write unit tests to verify individual functions and integration tests to verify that components work together correctly. SwiftUI also supports UI testing through XCUITest.
+
+func testAddition() {
+    XCTAssertEqual(2 + 2, 4)
+}
+
+Best Practices
+
+Follow Swift's naming conventions: use camelCase for variables and functions, PascalCase for types. Keep functions small and focused. Use guard statements for early returns. Prefer value types (structs) over reference types (classes) when possible. Use extensions to organize your code.
+
+Always handle errors appropriately rather than silently ignoring them. Use optionals correctly and avoid force unwrapping unless you're absolutely certain a value exists. Document your public APIs with comments.
+
+Performance Considerations
+
+Swift is designed to be fast. However, you should still be mindful of performance. Use value types to avoid heap allocation when possible. Be careful with collection operations that create new copies. Profile your code with Instruments to identify bottlenecks.
+
+For computationally intensive tasks, consider using concurrent processing with async/await or GCD. Lazy evaluation can help defer expensive computations until they're actually needed.
+
+Conclusion
+
+Swift is a modern, safe, and expressive language that makes iOS and macOS development enjoyable. Its strong type system, optional handling, protocol-oriented design, and modern concurrency features make it an excellent choice for app development. Keep learning and experimenting with Swift's features to become a more effective developer.
