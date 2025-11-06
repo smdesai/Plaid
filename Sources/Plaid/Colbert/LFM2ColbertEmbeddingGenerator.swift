@@ -32,6 +32,7 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         skiplistWords: [String]? = nil
     ) throws {
         let modelURL = try Self.locateModelURL()
+        configuration.computeUnits = .cpuAndGPU
         self.model = try MLModel(contentsOf: modelURL, configuration: configuration)
         self.tokenizer = tokenizer
         self.maxSequenceLength = tokenizer.maxSequenceLength
@@ -82,7 +83,7 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         let embeddings = Self.extractEmbeddings(from: tokenEmbeddings, limit: validTokenCount)
         let boolMask = Array(attentionMask.prefix(validTokenCount)).map { $0 != 0 }
 
-        print("generateEmbeddings preview:\n\(Self.formatEmbeddingsPreview(embeddings))")
+        //print("generateEmbeddings preview:\n\(Self.formatEmbeddingsPreview(embeddings))")
 
         return ColbertEmbeddingBatch(embeddings: embeddings, attentionMask: boolMask)
     }

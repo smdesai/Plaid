@@ -540,6 +540,7 @@ enum PlaidCLI {
                 }
 
                 do {
+                    print("  📖 Reading \(fileURL.lastPathComponent)...")
                     let content = try String(contentsOf: fileURL, encoding: .utf8)
                     let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1208,6 +1209,9 @@ enum PlaidCLI {
             }
 
             do {
+                print(
+                    "  [\(index + 1)/\(documentFiles.count)] 📖 Reading \(fileURL.lastPathComponent)..."
+                )
                 let content = try String(contentsOf: fileURL, encoding: .utf8)
                 let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1216,14 +1220,12 @@ enum PlaidCLI {
                     continue
                 }
 
-                print(
-                    "  [\(index + 1)/\(documentFiles.count)] \(fileURL.lastPathComponent) (\(trimmed.count) chars)"
-                )
+                print("      ✅ Loaded \(trimmed.count) chars, encoding...")
 
                 // Encode document
                 let embeddings = try colbert.encode(sentence: trimmed, isQuery: false)
                 allEmbeddings.append(embeddings)
-                print("    ✅ Encoded: \(embeddings.count) embeddings\n")
+                print("      ✅ Encoded: \(embeddings.count) embeddings\n")
 
             } catch {
                 print("❌ Error reading file \(filePath): \(error.localizedDescription)")

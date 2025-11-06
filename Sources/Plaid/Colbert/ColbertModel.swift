@@ -106,6 +106,11 @@ public struct ColbertModel {
     /// Encodes large documents by chunking them intelligently and concatenating embeddings.
     private func encodeWithChunking(_ text: String, chunker: SentenceChunker) throws -> [[Float]] {
         // Split document into manageable chunks using smart punctuation-aware splitting
+        let textSize = text.count
+        if textSize > 100_000 {
+            print("📄 Chunking large document (\(textSize) chars)...")
+        }
+
         let chunks = chunker.chunk(
             for: text,
             chunkSize: config.documentLength,
@@ -116,28 +121,33 @@ public struct ColbertModel {
             throw ColbertModelError.emptyInput
         }
 
-        print("📄 Document chunking: split into \(chunks.count) chunk(s)")
+        print("✅ Document chunked: \(chunks.count) chunk(s) created")
 
         // Process each chunk independently and concatenate all embeddings
         var allEmbeddings: [[Float]] = []
         allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)  // Estimate
+
+        let showProgress = chunks.count > 100
+        var lastReportedPercent = 0
 
         for (index, chunk) in chunks.enumerated() {
             guard !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 continue  // Skip empty chunks
             }
 
-            let preview = chunk.prefix(60)
-            print(
-                "  Chunk \(index + 1)/\(chunks.count): \"\(preview)\(chunk.count > 60 ? "..." : "")\""
-            )
-
             let chunkEmbeddings = try encodeSinglePass(chunk, isQuery: false)
             allEmbeddings.append(contentsOf: chunkEmbeddings)
 
-            print(
-                "    → Encoded \(chunkEmbeddings.count) tokens, total: \(allEmbeddings.count) embeddings"
-            )
+            // Show progress for large documents
+            if showProgress {
+                let percentComplete = ((index + 1) * 100) / chunks.count
+                if percentComplete >= lastReportedPercent + 10 {
+                    print(
+                        "   Encoding progress: \(percentComplete)% (\(index + 1)/\(chunks.count) chunks)"
+                    )
+                    lastReportedPercent = percentComplete
+                }
+            }
         }
 
         guard !allEmbeddings.isEmpty else {

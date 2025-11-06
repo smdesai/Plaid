@@ -48,12 +48,25 @@ public struct TokenSplitter: SentenceChunker {
 
         let effectiveChunkSize = min(chunkSize, 180)
         let effectiveOverlap = min(overlapSize, effectiveChunkSize - 1)
+
+        // Show progress for large documents
+        let textSize = sentence.count
+        if textSize > 100_000 {
+            print("   Tokenizing document...")
+        }
+
         let tokens = tokenizer.tokenize(text: sentence)
 
         guard !tokens.isEmpty else { return [] }
 
         var chunks: [String] = []
         var position = 0
+
+        // Estimate chunk count for progress reporting
+        let step = max(1, effectiveChunkSize - effectiveOverlap)
+        let estimatedChunks = (tokens.count + step - 1) / step
+        let showProgress = estimatedChunks > 1000
+        var lastReportedPercent = 0
 
         // Process tokens in sliding windows with overlap
         while position < tokens.count {
@@ -83,6 +96,17 @@ public struct TokenSplitter: SentenceChunker {
             // Step size = chunkSize - overlap (ensures overlap between consecutive chunks)
             let step = max(1, effectiveChunkSize - effectiveOverlap)
             position += step
+
+            // Report progress for very large documents
+            if showProgress {
+                let percentComplete = (position * 100) / tokens.count
+                if percentComplete >= lastReportedPercent + 10 {
+                    print(
+                        "   Chunking progress: \(percentComplete)% (\(chunks.count) chunks created)"
+                    )
+                    lastReportedPercent = percentComplete
+                }
+            }
         }
 
         return chunks
