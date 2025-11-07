@@ -10,19 +10,20 @@ class SearchEngine: ObservableObject {
     @Published var hasIndex = false
     @Published var indexState: IndexState?
     @Published var errorMessage: String?
+    @Published var currentModel: ModelType?
 
     private let indexURL: URL
-    private var tokenizer: PreTrainedColbertTokenizer?
+    private var tokenizer: ColbertTokenizer?
     private var colbert: ColbertModel?
 
-    private let modelId = "LiquidAI/LFM2-ColBERT-350M"
-    private let embeddingDim = 128
+    private var embeddingDim: Int = 128  // Will be set based on model
     private let nbits = 2
+
+    private static let currentModelKey = "currentModel"
 
     init() {
         // Set up index directory in Application Support
         let appSupport = FileManager.default.urls(
-            //            for: .applicationSupportDirectory,
             for: .documentDirectory,
             in: .userDomainMask
         ).first!
@@ -36,33 +37,49 @@ class SearchEngine: ObservableObject {
         )
     }
 
-    /// Initialize the ColBERT model and check for existing index
-    func initialize() async throws {
-        print("🔧 Initializing SearchEngine...")
+    /// Initialize the ColBERT model with specified model type
+    func initialize(with model: ModelType) async throws {
+        print("🔧 Initializing SearchEngine with \(model.displayName)...")
 
-        // Load tokenizer and model
-        print("📥 Loading ColBERT model...")
-        self.tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: modelId)
+        // Load tokenizer
+        print("📥 Loading tokenizer...")
+        self.tokenizer = try await ColbertTokenizer.from(pretrained: model.modelId)
 
         guard let tokenizer = tokenizer else {
             throw SearchEngineError.modelLoadFailed
         }
 
-        let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        // Create appropriate embedding generator based on model type
+        let generator: ColbertEmbeddingGenerator
+        switch model {
+        case .lfm2:
+            print("📦 Initializing LFM2 embedding generator...")
+            generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        case .mxbaiEdge:
+            print("📦 Initializing MXBAI-Edge embedding generator...")
+            generator = try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+        }
+
         let chunker = TokenSplitter(withTokenizer: tokenizer)
+
+        // Set embedding dimension based on model
+        self.embeddingDim = model.embeddingDimension
 
         self.colbert = ColbertModel(
             generator: generator,
             configuration: .init(
                 batchSize: 32,
-                embeddingDimension: embeddingDim,
+                embeddingDimension: model.embeddingDimension,
                 queryLength: tokenizer.maxSequenceLength,
                 documentLength: tokenizer.maxSequenceLength
             ),
             chunker: chunker
         )
 
-        print("✅ Model loaded successfully")
+        self.currentModel = model
+        UserDefaults.standard.set(model.rawValue, forKey: SearchEngine.currentModelKey)
+
+        print("✅ Model loaded successfully (embedding dim: \(model.embeddingDimension))")
 
         // Check for existing index
         self.hasIndex = checkForExistingIndex()
@@ -76,6 +93,21 @@ class SearchEngine: ObservableObject {
                 self.hasIndex = false
             }
         }
+    }
+
+    /// Initialize with saved model or default
+    func initialize() async throws {
+        // Load saved model preference or default to LFM2
+        let model: ModelType
+        if let savedRawValue = UserDefaults.standard.string(forKey: SearchEngine.currentModelKey),
+            let savedModel = ModelType(rawValue: savedRawValue)
+        {
+            model = savedModel
+        } else {
+            model = .lfm2
+        }
+
+        try await initialize(with: model)
     }
 
     /// Check if an index exists on disk
@@ -278,5 +310,30 @@ class SearchEngine: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(IndexState.self, from: data)
+    }
+
+    /// Delete the entire index and reset state
+    func deleteIndex() async throws {
+        print("🗑️ Deleting index...")
+
+        // Remove the index directory
+        if FileManager.default.fileExists(atPath: indexURL.path) {
+            try FileManager.default.removeItem(at: indexURL)
+            print("  ✅ Index directory removed")
+        }
+
+        // Recreate empty directory
+        try FileManager.default.createDirectory(
+            at: indexURL,
+            withIntermediateDirectories: true
+        )
+
+        // Reset state
+        await MainActor.run {
+            hasIndex = false
+            indexState = nil
+        }
+
+        print("✅ Index deleted successfully")
     }
 }

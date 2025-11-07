@@ -30,7 +30,8 @@ let package = Package(
             ],
             path: "Sources/Plaid",
             resources: [
-                .copy("Model/LFM2Colbert.mlpackage")
+                .copy("Model/LFM2Colbert.mlpackage"),
+                .copy("Model/MXBAIEdgeColbert.mlpackage"),
             ]
         ),
         .testTarget(

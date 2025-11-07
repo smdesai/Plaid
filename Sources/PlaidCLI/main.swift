@@ -15,6 +15,65 @@ enum PlaidCLI {
         "fixtures", isDirectory: true)
     private static let defaultTokenizerModelId = "LiquidAI/LFM2-ColBERT-350M"
 
+    // MARK: - Model Selection
+
+    enum CLIModel: String, CaseIterable {
+        case lfm2 = "lfm2"
+        case mxbai = "mxbai"
+
+        var modelId: String {
+            switch self {
+            case .lfm2:
+                return "LiquidAI/LFM2-ColBERT-350M"
+            case .mxbai:
+                return "mixedbread-ai/mxbai-edge-colbert-v0-32m"
+            }
+        }
+
+        var embeddingDimension: Int {
+            switch self {
+            case .lfm2:
+                return 128
+            case .mxbai:
+                return 64
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .lfm2:
+                return "LFM2-ColBERT (128-dim)"
+            case .mxbai:
+                return "MXBAI-Edge (64-dim)"
+            }
+        }
+
+        static func from(string: String) -> CLIModel? {
+            let normalized = string.lowercased().replacingOccurrences(of: "-", with: "")
+            switch normalized {
+            case "lfm2", "lfm2colbert":
+                return .lfm2
+            case "mxbai", "mxbaiedge", "mxbaiedgecolbert":
+                return .mxbai
+            default:
+                return nil
+            }
+        }
+    }
+
+    /// Creates the appropriate ColBERT generator for the given model
+    private static func createGenerator(
+        model: CLIModel,
+        tokenizer: ColbertTokenizer
+    ) throws -> ColbertEmbeddingGenerator {
+        switch model {
+        case .lfm2:
+            return try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        case .mxbai:
+            return try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+        }
+    }
+
     static func main() async throws {
         let args = Array(CommandLine.arguments.dropFirst())
         guard let command = args.first else {
@@ -53,15 +112,16 @@ enum PlaidCLI {
             Commands:
               demo         End-to-end demo: encode documents with ColBERT, create a Plaid index, and search.
                            Usage: demo --query "..." [--docs "..." | --files "..." | --index-path PATH] [OPTIONS]
-                           Options: --pretrained MODEL_ID, --top-k N, --nbits N, --keep-index, --index-name NAME
+                           Options: --model [lfm2|mxbai], --pretrained MODEL_ID, --top-k N, --nbits N, --keep-index, --index-name NAME
                            Examples:
-                             demo --query "..." --docs "text1" "text2" --files "doc1.txt" "doc2.md" --keep-index
+                             demo --query "..." --docs "text1" "text2" --model mxbai
+                             demo --query "..." --files "doc1.txt" "doc2.md" --keep-index
                              demo --query "..." --index-path /path/to/index
 
               update       Add new documents to an existing Plaid index.
                            Usage: update --index-path PATH --files FILE... [OPTIONS]
-                           Options: --pretrained MODEL_ID, --batch-size N
-                           Example: update -i ~/.plaid/my_index -f doc1.txt doc2.txt
+                           Options: --model [lfm2|mxbai], --pretrained MODEL_ID, --batch-size N
+                           Example: update -i ~/.plaid/my_index -f doc1.txt doc2.txt --model lfm2
 
               delete       Remove documents from an existing Plaid index by document IDs.
                            Usage: delete --index-path PATH (--doc-ids ID... | --ids-file FILE)
@@ -72,12 +132,16 @@ enum PlaidCLI {
               quickstart   Create an index, execute a search, and print the top results (test data).
 
               tokenize     Tokenize a string using a pretrained tokenizer and print tokens/ids.
-                           Usage: tokenize [--query|--doc] [--pretrained MODEL_ID] TEXT
-                           Default: \(defaultTokenizerModelId)
-                           Example: tokenize "test" or tokenize --pretrained CUSTOM_MODEL "test"
+                           Usage: tokenize [--query|--doc] [--model MODEL | --pretrained MODEL_ID] TEXT
+                           Default: LFM2-ColBERT
+                           Example: tokenize "test" or tokenize --model mxbai "test"
 
               similarity   Encode a query/document pair with the Core ML ColBERT model and print their score.
-                           Usage: similarity --query "..." --doc "..." [--pretrained MODEL_ID]
+                           Usage: similarity --query "..." --doc "..." [--model [lfm2|mxbai] | --pretrained MODEL_ID]
+
+            Available Models:
+              lfm2         LFM2-ColBERT (128-dimensional, default)
+              mxbai        MXBAI-Edge (64-dimensional, faster)
 
             For command-specific help, run: \(exe) <command> --help
             """)
@@ -309,12 +373,12 @@ enum PlaidCLI {
         let finalModelId = modelId ?? defaultTokenizerModelId
 
         print("Loading pretrained tokenizer from: \(finalModelId)...")
-        let tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: finalModelId)
+        let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
         printTokenizerOutput(input: input, isQuery: isQuery, tokenizer: tokenizer)
     }
 
     private static func printTokenizerOutput(
-        input: String, isQuery: Bool, tokenizer: PreTrainedColbertTokenizer
+        input: String, isQuery: Bool, tokenizer: ColbertTokenizer
     ) {
         let tokens = tokenizer.tokenize(text: input)
         let tokenIds = tokenizer.tokenizeToIds(text: input)
@@ -334,6 +398,7 @@ enum PlaidCLI {
         var queryText: String?
         var documentText: String?
         var modelId: String?
+        var selectedModel: CLIModel?
 
         var idx = 0
         while idx < arguments.count {
@@ -353,7 +418,19 @@ enum PlaidCLI {
                     return
                 }
                 documentText = arguments[idx]
-            case "--pretrained", "--model":
+            case "--model", "-m":
+                idx += 1
+                guard idx < arguments.count else {
+                    print("Missing value after --model\n")
+                    return
+                }
+                if let model = CLIModel.from(string: arguments[idx]) {
+                    selectedModel = model
+                } else {
+                    print("Unknown model: \(arguments[idx]). Use 'lfm2' or 'mxbai'\n")
+                    return
+                }
+            case "--pretrained", "-p":
                 idx += 1
                 guard idx < arguments.count else {
                     print("Missing value after --pretrained\n")
@@ -375,20 +452,23 @@ enum PlaidCLI {
 
         guard let queryText, let documentText else {
             print("similarity command expects a query and a document.")
-            print("Usage: similarity --query \"...\" --doc \"...\" [--pretrained MODEL_ID]\n")
+            print("Usage: similarity --query \"...\" --doc \"...\" [--model [lfm2|mxbai]]\n")
             return
         }
 
-        let finalModelId = modelId ?? defaultTokenizerModelId
-        print("Loading tokenizer/model: \(finalModelId)")
-        let tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        // Determine model: --model flag takes precedence over --pretrained
+        let model = selectedModel ?? .lfm2
+        let finalModelId = modelId ?? model.modelId
+
+        print("Loading tokenizer/model: \(finalModelId) (\(model.displayName))")
+        let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
+        let generator = try createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
             configuration: .init(
                 batchSize: 1,
-                embeddingDimension: 128,
+                embeddingDimension: model.embeddingDimension,
                 queryLength: tokenizer.maxSequenceLength,
                 documentLength: tokenizer.maxSequenceLength
             ),
@@ -412,6 +492,7 @@ enum PlaidCLI {
         var documentTexts: [String] = []
         var documentFiles: [String] = []
         var modelId: String?
+        var selectedModel: CLIModel?
         var topK: Int = 5
         var nbits: Int = 2
         var keepIndex: Bool = false
@@ -452,7 +533,19 @@ enum PlaidCLI {
                     return
                 }
                 existingIndexPath = arguments[idx]
-            case "--pretrained", "--model":
+            case "--model", "-m":
+                idx += 1
+                guard idx < arguments.count else {
+                    print("Missing value after --model\n")
+                    return
+                }
+                if let model = CLIModel.from(string: arguments[idx]) {
+                    selectedModel = model
+                } else {
+                    print("Unknown model: \(arguments[idx]). Use 'lfm2' or 'mxbai'\n")
+                    return
+                }
+            case "--pretrained", "-p":
                 idx += 1
                 guard idx < arguments.count else {
                     print("Missing value after --pretrained\n")
@@ -515,6 +608,7 @@ enum PlaidCLI {
             return try await runDemoWithExistingIndex(
                 indexPath: existingIndexPath,
                 queryText: queryText,
+                selectedModel: selectedModel,
                 modelId: modelId,
                 topK: topK
             )
@@ -569,7 +663,9 @@ enum PlaidCLI {
         // Replace documentTexts with all combined documents
         let finalDocumentTexts = allDocuments
 
-        let finalModelId = modelId ?? defaultTokenizerModelId
+        // Determine model: --model flag takes precedence over --pretrained
+        let model = selectedModel ?? .lfm2
+        let finalModelId = modelId ?? model.modelId
 
         print("╔══════════════════════════════════════════════════════════════════════╗")
         print("║  Plaid + ColBERT Demo: End-to-End Text Search                       ║")
@@ -583,15 +679,15 @@ enum PlaidCLI {
         print("\n🔍 Query: \"\(queryText)\"\n")
 
         // Load ColBERT model
-        print("⚙️  Loading ColBERT model: \(finalModelId)...")
-        let tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
+        let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
+        let generator = try createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
             configuration: .init(
                 batchSize: 1,
-                embeddingDimension: 128,
+                embeddingDimension: model.embeddingDimension,
                 queryLength: tokenizer.maxSequenceLength,
                 documentLength: tokenizer.maxSequenceLength
             ),
@@ -615,7 +711,7 @@ enum PlaidCLI {
         let centroids = try generateCentroidsFromDocuments(
             documentEmbeddings: documentEmbeddings,
             nbits: nbits,
-            embeddingDim: 128
+            embeddingDim: model.embeddingDimension
         )
         print("✅ Generated \(centroids.count) centroids\n")
 
@@ -626,12 +722,14 @@ enum PlaidCLI {
 
         print("📦 Creating Plaid index...")
         print("  Index location: \(indexURL.path)")
+        print("  Model: \(model.displayName)")
+        print("  Embedding dimension: \(model.embeddingDimension)")
         print("  nbits: \(nbits)")
         print("  Centroids: \(centroids.count)")
 
         try Plaid.create(
             indexURL: indexURL,
-            embeddingDim: 128,
+            embeddingDim: model.embeddingDimension,
             nbits: nbits,
             embeddings: documentEmbeddings,
             centroids: centroids,
@@ -747,6 +845,7 @@ enum PlaidCLI {
     private static func runDemoWithExistingIndex(
         indexPath: String,
         queryText: String,
+        selectedModel: CLIModel?,
         modelId: String?,
         topK: Int
     ) async throws {
@@ -767,7 +866,9 @@ enum PlaidCLI {
             return
         }
 
-        let finalModelId = modelId ?? defaultTokenizerModelId
+        // Determine model: --model flag takes precedence over --pretrained
+        let model = selectedModel ?? .lfm2
+        let finalModelId = modelId ?? model.modelId
 
         print("╔══════════════════════════════════════════════════════════════════════╗")
         print("║  Plaid + ColBERT Demo: Search Existing Index                        ║")
@@ -797,15 +898,15 @@ enum PlaidCLI {
         }
 
         // Load ColBERT model
-        print("⚙️  Loading ColBERT model: \(finalModelId)...")
-        let tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
+        let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
+        let generator = try createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
             configuration: .init(
                 batchSize: 1,
-                embeddingDimension: 128,
+                embeddingDimension: model.embeddingDimension,
                 queryLength: tokenizer.maxSequenceLength,
                 documentLength: tokenizer.maxSequenceLength
             ),
@@ -1074,7 +1175,8 @@ enum PlaidCLI {
     private static func runUserUpdate(arguments: [String]) async throws {
         var indexPath: String?
         var documentFiles: [String] = []
-        var pretrainedModel = defaultTokenizerModelId
+        var pretrainedModel: String?
+        var selectedModel: CLIModel?
         var batchSize = 64
 
         // Parse arguments
@@ -1097,6 +1199,19 @@ enum PlaidCLI {
                     idx += 1
                 }
                 idx -= 1
+
+            case "--model", "-m":
+                idx += 1
+                guard idx < arguments.count else {
+                    print("❌ Error: --model requires a value")
+                    return
+                }
+                if let model = CLIModel.from(string: arguments[idx]) {
+                    selectedModel = model
+                } else {
+                    print("❌ Error: Unknown model '\(arguments[idx])'. Use 'lfm2' or 'mxbai'")
+                    return
+                }
 
             case "--pretrained", "-p":
                 idx += 1
@@ -1126,12 +1241,14 @@ enum PlaidCLI {
                       --files, -f FILE...        One or more text files to add
 
                     Optional:
-                      --pretrained, -p MODEL     HuggingFace model ID (default: \(defaultTokenizerModelId))
+                      --model, -m MODEL          Model to use: lfm2 (default) or mxbai
+                      --pretrained, -p MODEL     HuggingFace model ID (overrides --model)
                       --batch-size, -b SIZE      Batch size for encoding (default: 64)
                       --help, -h                 Show this help
 
-                    Example:
+                    Examples:
                       PlaidCLI update -i ~/.plaid/my_index -f doc1.txt doc2.txt
+                      PlaidCLI update -i ~/.plaid/my_index -f new_doc.txt --model mxbai
                     """)
                 return
 
@@ -1165,6 +1282,10 @@ enum PlaidCLI {
             return
         }
 
+        // Determine model: --model flag takes precedence over --pretrained
+        let model = selectedModel ?? .lfm2
+        let finalModelId = pretrainedModel ?? model.modelId
+
         print("╔══════════════════════════════════════════════════════════════════════╗")
         print("║  Plaid Index Update                                                  ║")
         print("╚══════════════════════════════════════════════════════════════════════╝\n")
@@ -1173,14 +1294,14 @@ enum PlaidCLI {
         print("📄 Documents to add: \(documentFiles.count)\n")
 
         // Load ColBERT model
-        print("⚙️  Loading ColBERT model: \(pretrainedModel)...")
-        let tokenizer = try await PreTrainedColbertTokenizer.from(pretrained: pretrainedModel)
-        let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+        print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
+        let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
+        let generator = try createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
             configuration: .init(
-                embeddingDimension: 128,
+                embeddingDimension: model.embeddingDimension,
                 queryLength: 32,
                 documentLength: 180
             ),

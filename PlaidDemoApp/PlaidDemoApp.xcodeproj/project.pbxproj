@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7B4E75EA2EBE627F00D1DAE0 /* ModelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */; };
+		7B4E75EC2EBE629200D1DAE0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */; };
 		7BD6BE0E2EBD304E0045A16C /* health_tips_es.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE052EBD304E0045A16C /* health_tips_es.txt */; };
 		7BD6BE0F2EBD304E0045A16C /* swift_programming_ja.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE0A2EBD304E0045A16C /* swift_programming_ja.txt */; };
 		7BD6BE102EBD304E0045A16C /* swift_programming_fr.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE092EBD304E0045A16C /* swift_programming_fr.txt */; };
@@ -32,6 +34,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreferences.swift; sourceTree = "<group>"; };
+		7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7BD6BE052EBD304E0045A16C /* health_tips_es.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_es.txt; sourceTree = "<group>"; };
 		7BD6BE062EBD304E0045A16C /* health_tips_fr.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_fr.txt; sourceTree = "<group>"; };
 		7BD6BE072EBD304E0045A16C /* health_tips_ja.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_ja.txt; sourceTree = "<group>"; };
@@ -92,6 +96,7 @@
 		AA8110 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */,
 				AA0106 /* IndexState.swift */,
 				AA0107 /* SearchEngine.swift */,
 			);
@@ -101,6 +106,7 @@
 		AA8120 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */,
 				AA0102 /* ContentView.swift */,
 				AA0103 /* WelcomeView.swift */,
 				AA0104 /* SearchView.swift */,
@@ -243,7 +249,9 @@
 				AA0001 /* PlaidDemoApp.swift in Sources */,
 				AA0002 /* ContentView.swift in Sources */,
 				AA0003 /* WelcomeView.swift in Sources */,
+				7B4E75EC2EBE629200D1DAE0 /* SettingsView.swift in Sources */,
 				AA0004 /* SearchView.swift in Sources */,
+				7B4E75EA2EBE627F00D1DAE0 /* ModelPreferences.swift in Sources */,
 				AA0005 /* ResultCard.swift in Sources */,
 				AA0006 /* IndexState.swift in Sources */,
 				AA0007 /* SearchEngine.swift in Sources */,

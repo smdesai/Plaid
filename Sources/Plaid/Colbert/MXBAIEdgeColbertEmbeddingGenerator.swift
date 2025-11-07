@@ -1,21 +1,21 @@
 import CoreML
 import Foundation
 
-public enum LFM2ColbertGeneratorError: Error, LocalizedError {
+public enum MXBAIEdgeColbertGeneratorError: Error, LocalizedError {
     case modelNotFound
     case missingOutput(String)
 
     public var errorDescription: String? {
         switch self {
         case .modelNotFound:
-            return "Unable to locate LFM2Colbert Core ML model in the Plaid bundle."
+            return "Unable to locate MXVBAIEdgeColbert Core ML model in the Plaid bundle."
         case .missingOutput(let name):
             return "Core ML output \(name) was not found in the prediction result."
         }
     }
 }
 
-public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
+public final class MXBAIEdgeColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
     private let model: MLModel
     private let tokenizer: ColbertTokenizer
     private let skiplistTokenIds: Set<Int>
@@ -76,7 +76,7 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         guard
             let tokenEmbeddings = prediction.featureValue(for: "token_embeddings")?.multiArrayValue
         else {
-            throw LFM2ColbertGeneratorError.missingOutput("token_embeddings")
+            throw MXBAIEdgeColbertGeneratorError.missingOutput("token_embeddings")
         }
 
         let validTokenCount = max(attentionMask.reduce(0, +), 1)
@@ -158,7 +158,7 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
                 let tokenEmbeddings = prediction.featureValue(for: "token_embeddings")?
                     .multiArrayValue
             else {
-                throw LFM2ColbertGeneratorError.missingOutput("token_embeddings")
+                throw MXBAIEdgeColbertGeneratorError.missingOutput("token_embeddings")
             }
 
             let validTokenCount = max(allAttentionMasks[index].reduce(0, +), 1)
@@ -174,24 +174,24 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
     private static func locateModelURL() throws -> URL {
         #if SWIFT_PACKAGE
             if let compiled = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlmodelc")
+                forResource: "MXBAIEdgeColbert", withExtension: "mlmodelc")
             {
                 return compiled
             }
             if let packageURL = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlpackage")
+                forResource: "MXBAIEdgeColbert", withExtension: "mlpackage")
             {
                 let compiled = try MLModel.compileModel(at: packageURL)
                 return compiled
             }
             if let modelURL = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlmodel")
+                forResource: "MXBAIEdgeColbert", withExtension: "mlmodel")
             {
                 let compiled = try MLModel.compileModel(at: modelURL)
                 return compiled
             }
         #endif
-        throw LFM2ColbertGeneratorError.modelNotFound
+        throw MXBAIEdgeColbertGeneratorError.modelNotFound
     }
 
     private static func buildSkiplist(tokenizer: ColbertTokenizer, words: [String])

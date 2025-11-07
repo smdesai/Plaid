@@ -2,21 +2,21 @@ import Foundation
 import Hub
 import Tokenizers
 
-/// Errors that can occur when using PreTrainedColbertTokenizer
-public enum PreTrainedColbertTokenizerError: Error, LocalizedError {
+/// Errors that can occur when using ColbertTokenizer
+public enum ColbertTokenizerError: Error, LocalizedError {
     case invalidTokenizerType
 
     public var errorDescription: String? {
         switch self {
         case .invalidTokenizerType:
-            return "The loaded tokenizer is not a PreTrainedTokenizer."
+            return "The loaded tokenizer is not a Tokenizer."
         }
     }
 }
 
-/// A tokenizer that uses Hugging Face's PreTrainedTokenizer from swift-transformers
+/// A tokenizer that uses Hugging Face's Tokenizer from swift-transformers
 /// to load tokenizers from the Hub, specifically designed for ColBERT models.
-public class PreTrainedColbertTokenizer: TokenizerProtocol {
+public class ColbertTokenizer: TokenizerProtocol {
     private let tokenizer: PreTrainedTokenizer
     private let maxLen = 256  // CoreML model
 
@@ -26,25 +26,25 @@ public class PreTrainedColbertTokenizer: TokenizerProtocol {
     private let docPadTokenId: Int
 
     /// Initialize from a pretrained model on Hugging Face Hub
-    public static func from(pretrained modelId: String) async throws -> PreTrainedColbertTokenizer {
+    public static func from(pretrained modelId: String) async throws -> ColbertTokenizer {
         guard
             let tokenizer = try await AutoTokenizer.from(pretrained: modelId)
                 as? PreTrainedTokenizer
         else {
-            throw PreTrainedColbertTokenizerError.invalidTokenizerType
+            throw ColbertTokenizerError.invalidTokenizerType
         }
-        return try PreTrainedColbertTokenizer(tokenizer: tokenizer)
+        return try ColbertTokenizer(tokenizer: tokenizer)
     }
 
     /// Initialize from a local model folder
-    public static func from(modelFolder: URL) async throws -> PreTrainedColbertTokenizer {
+    public static func from(modelFolder: URL) async throws -> ColbertTokenizer {
         guard
             let tokenizer = try await AutoTokenizer.from(modelFolder: modelFolder)
                 as? PreTrainedTokenizer
         else {
-            throw PreTrainedColbertTokenizerError.invalidTokenizerType
+            throw ColbertTokenizerError.invalidTokenizerType
         }
-        return try PreTrainedColbertTokenizer(tokenizer: tokenizer)
+        return try ColbertTokenizer(tokenizer: tokenizer)
     }
 
     private init(tokenizer: PreTrainedTokenizer) throws {

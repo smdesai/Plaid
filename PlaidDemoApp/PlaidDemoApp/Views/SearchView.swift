@@ -10,6 +10,7 @@ struct SearchView: View {
     @State private var searchResults: [SearchResult] = []
     @State private var isSearching = false
     @State private var selectedResult: SearchResult?
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,15 @@ struct SearchView: View {
                 // Index stats
                 if let indexState = searchEngine.indexState {
                     HStack(spacing: 16) {
+                        if let currentModel = searchEngine.currentModel {
+                            Label(
+                                currentModel.displayName,
+                                systemImage: currentModel.iconName
+                            )
+                            .font(.caption)
+                            .foregroundColor(currentModel.color)
+                        }
+
                         Label(
                             "\(indexState.totalDocuments) docs",
                             systemImage: "doc.text"
@@ -104,11 +114,27 @@ struct SearchView: View {
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search documents..."
                 )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showSettings = true }) {
+                            Image(systemName: "gear")
+                            .font(.body)
+                            .foregroundColor(.blue)
+                        }
+                    }
+                }
             #else
                 .searchable(
                     text: $searchText,
                     prompt: "Search documents..."
                 )
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        Button(action: { showSettings = true }) {
+                            Image(systemName: "gear")
+                        }
+                    }
+                }
             #endif
             .onSubmit(of: .search) {
                 performSearch()
@@ -123,6 +149,9 @@ struct SearchView: View {
             }
             .sheet(item: $selectedResult) { result in
                 DocumentDetailView(result: result)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(searchEngine: searchEngine)
             }
         }
     }
