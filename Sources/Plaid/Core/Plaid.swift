@@ -7,6 +7,7 @@ public enum PlaidError: Error, LocalizedError {
     case mismatchedQueryDimension(expected: Int, actual: Int)
     case indexNotFound(URL)
     case invalidSubset(String)
+    case invalidDocumentId(Int, totalDocuments: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ public enum PlaidError: Error, LocalizedError {
             return "No index materialized at \(url.path)."
         case .invalidSubset(let reason):
             return "Subset validation failed: \(reason)."
+        case .invalidDocumentId(let docId, let totalDocuments):
+            return "Document ID \(docId) is out of range. Valid range is 0..<\(totalDocuments)."
         }
     }
 }
@@ -493,6 +496,144 @@ public enum Plaid {
             indexURL: URL(fileURLWithPath: indexPath),
             torchPath: torchPath,
             subset: subset
+        )
+    }
+
+    /// Retrieves the full decompressed token-level embeddings for a specific document.
+    ///
+    /// - Parameters:
+    ///   - indexURL: URL to the index directory
+    ///   - documentId: The ID of the document to retrieve embeddings for
+    ///   - torchPath: Optional torch path (unused, retained for API parity)
+    /// - Returns: A 2D array of embeddings where each inner array represents a token embedding.
+    ///           Returns `[[Float]]` with shape `[num_tokens, embedding_dim]`
+    /// - Throws: `PlaidError.invalidDocumentId` if the document ID is out of range,
+    ///          `PlaidError.indexNotFound` if the index doesn't exist
+    public static func getDocumentEmbeddings(
+        indexURL: URL,
+        documentId: Int,
+        torchPath: String? = nil
+    ) throws -> [[Float]] {
+        // Load index artifacts
+        let artifacts = try IndexStorage.loadArtifacts(from: indexURL)
+
+        // Validate document ID
+        guard documentId >= 0 && documentId < artifacts.docLengths.count else {
+            throw PlaidError.invalidDocumentId(
+                documentId, totalDocuments: artifacts.docLengths.count)
+        }
+
+        // Get document boundaries
+        let docStart = artifacts.embeddingOffsets[documentId]
+        let docEnd = artifacts.embeddingOffsets[documentId + 1]
+        let docLen = docEnd - docStart
+
+        guard docLen > 0 else {
+            // Empty document, return empty array
+            return []
+        }
+
+        // Decompress embeddings
+        let embeddingTensor = artifacts.residuals.withUnsafeBytes { rawBuffer -> MLXArray? in
+            let residualBytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = residualBytes.baseAddress else { return nil }
+
+            // Determine which decompression method to use
+            let useVectorized: Bool
+            if let bucketWeights = artifacts.bucketWeights,
+                artifacts.codecArtifacts.bucketWeightLookup != nil
+            {
+                let shape = bucketWeights.shape
+                let nbits = artifacts.nbits
+                let numBuckets = 1 << nbits
+                useVectorized =
+                    shape.count == 2
+                    && shape[0] == numBuckets
+                    && shape[1] == artifacts.embeddingDim
+            } else {
+                useVectorized = false
+            }
+
+            if useVectorized {
+                return decompressDocumentVectorized(
+                    docStart: docStart,
+                    docLen: docLen,
+                    artifacts: artifacts,
+                    residualBytes: baseAddress,
+                    stream: .default
+                )
+            } else {
+                // Create cached artifacts for scalar decompression
+                let centroidValues = artifacts.centroids.asArray(Float.self)
+                let bucketWeightsArray = artifacts.bucketWeights?.asArray(Float.self)
+                let byteMapArray = artifacts.codecArtifacts.byteReversedBitsMap.asArray(Int.self)
+                let bucketLookupArray = artifacts.codecArtifacts.bucketWeightLookup?.asArray(
+                    Int.self)
+
+                let nbits = artifacts.nbits
+                let numBuckets = 1 << nbits
+                let keysPerByte = max(1, 8 / nbits)
+
+                return decompressDocumentScalar(
+                    docStart: docStart,
+                    docLen: docLen,
+                    embeddingDim: artifacts.embeddingDim,
+                    nbits: nbits,
+                    codes: artifacts.codes,
+                    centroidValues: centroidValues,
+                    bucketWeights: bucketWeightsArray,
+                    residualBytes: baseAddress,
+                    bytesPerResidual: artifacts.bytesPerResidual,
+                    numBuckets: numBuckets,
+                    residualCount: artifacts.residuals.count,
+                    keysPerByte: keysPerByte,
+                    byteMap: byteMapArray,
+                    bucketLookup: bucketLookupArray
+                )
+            }
+        }
+
+        guard let tensor = embeddingTensor else {
+            throw PlaidError.emptyEmbeddingSet
+        }
+
+        // Convert MLXArray to [[Float]]
+        let values = tensor.asArray(Float32.self)
+        let numTokens = docLen
+        let embeddingDim = artifacts.embeddingDim
+
+        var result: [[Float]] = []
+        result.reserveCapacity(numTokens)
+
+        for tokenIdx in 0 ..< numTokens {
+            let start = tokenIdx * embeddingDim
+            let end = start + embeddingDim
+            let tokenEmbedding = values[start ..< end].map { Float($0) }
+            result.append(tokenEmbedding)
+        }
+
+        return result
+    }
+
+    /// Retrieves the full decompressed token-level embeddings for a specific document.
+    ///
+    /// - Parameters:
+    ///   - indexPath: Path to the index directory
+    ///   - documentId: The ID of the document to retrieve embeddings for
+    ///   - torchPath: Optional torch path (unused, retained for API parity)
+    /// - Returns: A 2D array of embeddings where each inner array represents a token embedding.
+    ///           Returns `[[Float]]` with shape `[num_tokens, embedding_dim]`
+    /// - Throws: `PlaidError.invalidDocumentId` if the document ID is out of range,
+    ///          `PlaidError.indexNotFound` if the index doesn't exist
+    public static func getDocumentEmbeddings(
+        indexPath: String,
+        documentId: Int,
+        torchPath: String? = nil
+    ) throws -> [[Float]] {
+        try getDocumentEmbeddings(
+            indexURL: URL(fileURLWithPath: indexPath),
+            documentId: documentId,
+            torchPath: torchPath
         )
     }
 }

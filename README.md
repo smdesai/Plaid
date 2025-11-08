@@ -10,6 +10,7 @@ Plaid Swift is a native Swift implementation of the Plaid indexing and search sy
 - 🤖 **Dual Model Support** - Choose between LFM2-ColBERT (128-dim) and MXBAI-Edge (64-dim)
 - 📦 **Compact Indexes** - Product quantization with 1-8 bit compression
 - 🔄 **Intelligent Chunking** - Automatic handling of large documents with overlap
+- 🔍 **Embedding Retrieval** - Extract decompressed token embeddings from indexed documents
 - 💻 **Native Swift** - No Python or PyTorch dependencies
 - 📱 **iOS & macOS** - Runs on-device with CoreML acceleration
 - 🎯 **Easy CLI** - Index and search from the command line
@@ -142,6 +143,65 @@ for result in results {
         print("  Document \(docId): score \(score)")
     }
 }
+```
+
+### Retrieving Document Embeddings
+
+Once documents are indexed, you can retrieve their full decompressed token-level embeddings:
+
+```swift
+// Retrieve embeddings for a specific document by its ID
+let documentId = 5  // Document IDs are assigned sequentially (0, 1, 2, ...)
+
+let embeddings = try Plaid.getDocumentEmbeddings(
+    indexURL: URL(fileURLWithPath: "/path/to/index"),
+    documentId: documentId
+)
+
+// embeddings is [[Float]] with shape [num_tokens, embedding_dim]
+print("Document \(documentId) has \(embeddings.count) tokens")
+print("Embedding dimension: \(embeddings[0].count)")
+
+// Access individual token embeddings
+for (tokenIdx, tokenEmbedding) in embeddings.enumerated() {
+    print("Token \(tokenIdx): \(tokenEmbedding)")
+}
+```
+
+**How it works:**
+- Document IDs are assigned sequentially starting from 0 in the order they were added to the index
+- Embeddings are automatically decompressed from the compressed storage format
+- Each token embedding is normalized (as stored in the index)
+- Returns an empty array `[]` for documents with no tokens
+
+**Use cases:**
+- Custom similarity calculations beyond ColBERT scoring
+- Analyzing token-level representations
+- Exporting embeddings for other ML pipelines
+- Debugging and visualization of document encodings
+
+**Error handling:**
+```swift
+do {
+    let embeddings = try Plaid.getDocumentEmbeddings(
+        indexPath: "/path/to/index",
+        documentId: 999
+    )
+    print("Retrieved \(embeddings.count) token embeddings")
+} catch PlaidError.invalidDocumentId(let docId, let totalDocuments) {
+    print("Error: Document ID \(docId) out of range (0..<\(totalDocuments))")
+} catch {
+    print("Error: \(error)")
+}
+```
+
+**Path-based convenience API:**
+```swift
+// Use string path instead of URL
+let embeddings = try Plaid.getDocumentEmbeddings(
+    indexPath: "/path/to/index",
+    documentId: 5
+)
 ```
 
 ### Using ColBERT Embeddings
