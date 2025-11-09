@@ -83,7 +83,7 @@ public final class MXBAIEdgeColbertEmbeddingGenerator: ColbertEmbeddingGenerator
         let embeddings = Self.extractEmbeddings(from: tokenEmbeddings, limit: validTokenCount)
         let boolMask = Array(attentionMask.prefix(validTokenCount)).map { $0 != 0 }
 
-        //print("generateEmbeddings preview:\n\(Self.formatEmbeddingsPreview(embeddings))")
+        //print("generateEmbeddings preview:\n\(EmbeddingFormatting.formatEmbeddingsPreview(embeddings))")
 
         return ColbertEmbeddingBatch(embeddings: embeddings, attentionMask: boolMask)
     }
@@ -226,33 +226,6 @@ public final class MXBAIEdgeColbertEmbeddingGenerator: ColbertEmbeddingGenerator
         }
 
         return vectors
-    }
-
-    private static func formatEmbeddingsPreview(
-        _ embeddings: [[Float]],
-        headCount: Int = 5,
-        tailCount: Int = 5
-    ) -> String {
-        guard !embeddings.isEmpty else { return "(empty)" }
-        return embeddings.enumerated().map { index, vector in
-            let formatted = formatVector(vector, headCount: headCount, tailCount: tailCount)
-            return "  [token #\(index)] \(formatted)"
-        }.joined(separator: "\n")
-    }
-
-    private static func formatVector(
-        _ values: [Float],
-        headCount: Int,
-        tailCount: Int
-    ) -> String {
-        let formatter: (Float) -> String = { String(format: "%.9f", $0) }
-        if values.count <= headCount + tailCount {
-            return "[" + values.map(formatter).joined(separator: ", ") + "]"
-        }
-
-        let head = values.prefix(headCount).map(formatter)
-        let tail = values.suffix(tailCount).map(formatter)
-        return "[" + head.joined(separator: ", ") + ", …, " + tail.joined(separator: ", ") + "]"
     }
 }
 
