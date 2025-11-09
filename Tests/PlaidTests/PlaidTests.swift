@@ -88,7 +88,6 @@ final class PlaidTests: XCTestCase {
 
         let swiftResults = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,
@@ -102,14 +101,18 @@ final class PlaidTests: XCTestCase {
             XCTAssertEqual(swift.queryId, reference.query_id)
 
             let swiftPairs: [(passageId: Int, score: Float)] = zip(swift.passageIds, swift.scores)
-                .map { (passageId: $0.0, score: $0.1) }
+                .map { pair -> (passageId: Int, score: Float) in
+                    (passageId: pair.0, score: pair.1)
+                }
 
             let referencePassages: [Int] = reference.passage_ids.map { Int($0) }
             let referenceScores: [Float] = reference.scores.map { Float($0) }
             let referencePairs: [(passageId: Int, score: Float)] = zip(
                 referencePassages, referenceScores
             )
-            .map { (passageId: $0.0, score: $0.1) }
+            .map { pair -> (passageId: Int, score: Float) in
+                (passageId: pair.0, score: pair.1)
+            }
 
             let swiftSorted = swiftPairs.sorted {
                 (lhs: (passageId: Int, score: Float), rhs: (passageId: Int, score: Float)) -> Bool
@@ -163,7 +166,6 @@ final class PlaidTests: XCTestCase {
 
         try Plaid.create(
             indexURL: indexURL,
-            device: "cpu",
             embeddingDim: 4,
             nbits: 2,
             embeddings: Self.initialDocuments(),
@@ -182,7 +184,6 @@ final class PlaidTests: XCTestCase {
 
         try Plaid.update(
             indexURL: indexURL,
-            device: "cpu",
             embeddings: Self.updateDocuments(),
             batchSize: 1
         )
@@ -197,7 +198,6 @@ final class PlaidTests: XCTestCase {
 
         try Plaid.delete(
             indexURL: indexURL,
-            device: "cpu",
             subset: [1]
         )
 
@@ -257,7 +257,6 @@ extension PlaidTests {
     ) throws {
         let swiftResults = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,

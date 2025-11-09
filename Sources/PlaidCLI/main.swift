@@ -477,8 +477,12 @@ enum PlaidCLI {
 
         print("=== query embedding ===")
         let queryEmbedding = try colbert.encode(sentence: queryText, isQuery: true)
+        print(EmbeddingFormatting.formatEmbeddingsPreview(queryEmbedding))
+
         print("=== document embedding ===")
         let documentEmbedding = try colbert.encode(sentence: documentText, isQuery: false)
+        print(EmbeddingFormatting.formatEmbeddingsPreview(documentEmbedding))
+
         print("=== similarity ===")
         let score = try colbert.similarity(query: queryEmbedding, document: documentEmbedding)
 
@@ -703,6 +707,7 @@ enum PlaidCLI {
             documentEmbeddings.append(embedding)
             print(
                 "  [\(i)] Encoded: \(embedding.count) tokens × \(embedding.first?.count ?? 0) dims")
+            print(EmbeddingFormatting.formatEmbeddingsPreview(embedding))
         }
         print("✅ All documents encoded\n")
 
@@ -742,6 +747,7 @@ enum PlaidCLI {
         let queryEmbedding = try colbert.encode(sentence: queryText, isQuery: true)
         print("  Query: \(queryEmbedding.count) tokens × \(queryEmbedding.first?.count ?? 0) dims")
         print("✅ Query encoded\n")
+        print(EmbeddingFormatting.formatEmbeddingsPreview(queryEmbedding))
 
         // Search
         print("🔎 Searching index...")

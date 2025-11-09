@@ -7,29 +7,19 @@ final class TokenSplitterTests: XCTestCase {
 
     /// Mock tokenizer for testing
     class MockTokenizer: TokenizerProtocol {
-        var maxSequenceLength: Int = 512
-        var queryPadTokenIdentifier: Int = 0
-        var docPadTokenIdentifier: Int = 0
-
         func tokenize(text: String) -> [String] {
             // Simple whitespace tokenization for testing
             return text.split(separator: " ").map { String($0) }
         }
 
         func tokenizeToIds(text: String) -> [Int] {
-            return tokenize(text: text).enumerated().map { $0.offset }
+            // Generate simple sequential IDs based on token position
+            let tokens = tokenize(text: text)
+            return tokens.enumerated().map { $0.offset + 1 }  // Start from 1 to avoid 0
         }
 
         func detokenize(tokens: [String]) -> String {
             return tokens.joined(separator: " ")
-        }
-
-        func buildModelTokens(sentence: String, isQuery: Bool) -> [Int] {
-            return tokenizeToIds(text: sentence)
-        }
-
-        func tokenId(for word: String) -> Int? {
-            return word.hashValue
         }
     }
 
@@ -126,5 +116,64 @@ final class TokenSplitterTests: XCTestCase {
             let wordCount = chunk.split(separator: " ").count
             XCTAssertLessThanOrEqual(wordCount, 180, "Chunk size should be capped at 180")
         }
+    }
+
+    func testChunkToIdsFollowsChunkSizeAndOverlap() {
+        let tokenizer = MockTokenizer()
+        let splitter = TokenSplitter(withTokenizer: tokenizer)
+
+        let tokenIds = Array(1 ... 60)
+        let chunkSize = 16
+        let overlap = 4
+
+        let chunks = splitter.chunkToIds(
+            tokenIds: tokenIds, chunkSize: chunkSize, overlapSize: overlap)
+
+        XCTAssertEqual(
+            chunks.first, Array(1 ... chunkSize), "First chunk should capture initial tokens")
+        XCTAssertTrue(
+            chunks.allSatisfy { $0.count <= chunkSize }, "All chunks must respect chunk size")
+
+        // Manually build the expected sliding windows to ensure logic stays in sync
+        var expected: [[Int]] = []
+        var position = 0
+        let step = chunkSize - overlap
+        while position < tokenIds.count {
+            let end = min(position + chunkSize, tokenIds.count)
+            expected.append(Array(tokenIds[position ..< end]))
+            position += max(step, 1)
+        }
+
+        XCTAssertEqual(chunks, expected, "chunkToIds should produce the same sliding windows")
+    }
+
+    func testChunkToIdsClampsLargeOverlap() {
+        let tokenizer = MockTokenizer()
+        let splitter = TokenSplitter(withTokenizer: tokenizer)
+
+        let tokenIds = Array(1 ... 15)
+        let chunkSize = 5
+        let overlap = 20  // Larger than chunk size, should clamp internally
+
+        let chunks = splitter.chunkToIds(
+            tokenIds: tokenIds, chunkSize: chunkSize, overlapSize: overlap)
+
+        // With effective overlap=chunkSize-1 the window should advance by exactly one token each time
+        XCTAssertEqual(
+            chunks.count, tokenIds.count,
+            "Sliding by one token should yield one chunk per token start"
+        )
+        XCTAssertEqual(chunks[0], [1, 2, 3, 4, 5])
+        XCTAssertEqual(chunks[1], [2, 3, 4, 5, 6])
+        XCTAssertEqual(chunks[10], [11, 12, 13, 14, 15])
+        XCTAssertEqual(chunks.last, [15], "Final chunk should contain the trailing tokens")
+    }
+
+    func testChunkToIdsEmptyInput() {
+        let tokenizer = MockTokenizer()
+        let splitter = TokenSplitter(withTokenizer: tokenizer)
+
+        let chunks = splitter.chunkToIds(tokenIds: [], chunkSize: 10, overlapSize: 5)
+        XCTAssertTrue(chunks.isEmpty, "Empty token input should yield no chunks")
     }
 }

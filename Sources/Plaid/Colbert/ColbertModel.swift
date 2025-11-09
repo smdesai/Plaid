@@ -50,6 +50,7 @@ public struct ColbertModel {
     private let generator: ColbertEmbeddingGenerator
     private var config: Configuration
     private let chunker: SentenceChunker?
+    private let specialTokenCount = 2  // Accounts for [BOS] + [Q]/[D]
 
     public init(
         generator: ColbertEmbeddingGenerator,
@@ -111,33 +112,48 @@ public struct ColbertModel {
             print("📄 Chunking large document (\(textSize) chars)...")
         }
 
-        let chunks = chunker.chunk(
-            for: text,
-            chunkSize: config.documentLength,
-            overlapSize: 64  // Overlap helps maintain context across chunk boundaries
+        // PERFORMANCE OPTIMIZATION: Use token ID-based chunking to avoid re-tokenization
+        // Tokenize once, chunk the IDs, then pass directly to embedding generator
+        let tokenIds = generator.tokenizeToIds(text: text)
+        let contentTokenBudget = max(config.documentLength - specialTokenCount, 1)
+        let overlapTokens = min(64, max(contentTokenBudget - 1, 0))
+        let tokenChunks = chunker.chunkToIds(
+            tokenIds: tokenIds,
+            chunkSize: contentTokenBudget,
+            overlapSize: overlapTokens
         )
 
-        guard !chunks.isEmpty else {
+        guard !tokenChunks.isEmpty else {
             throw ColbertModelError.emptyInput
         }
 
-        print("✅ Document chunked: \(chunks.count) chunk(s) created")
+        print("✅ Document chunked: \(tokenChunks.count) chunk(s) created")
 
         // Use batched processing for large documents (>100 chunks)
-        if chunks.count > 100 {
-            return try encodeChunksBatched(chunks)
+        if tokenChunks.count > 100 {
+            return try encodeChunksBatchedOptimized(tokenChunks)
         }
 
         // Process each chunk independently and concatenate all embeddings
         var allEmbeddings: [[Float]] = []
-        allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)  // Estimate
+        allEmbeddings.reserveCapacity(tokenChunks.count * config.documentLength / 2)  // Estimate
 
-        for chunk in chunks {
-            guard !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        for tokenChunk in tokenChunks {
+            guard !tokenChunk.isEmpty else {
                 continue  // Skip empty chunks
             }
 
-            let chunkEmbeddings = try encodeSinglePass(chunk, isQuery: false)
+            let generated = try generator.generateEmbeddings(
+                fromTokenIds: tokenChunk,
+                isQuery: false,
+                maxLength: config.documentLength
+            )
+
+            let chunkEmbeddings = try processBatch(
+                generated.embeddings,
+                attentionMask: generated.attentionMask,
+                isQuery: false
+            )
             allEmbeddings.append(contentsOf: chunkEmbeddings)
         }
 
@@ -146,37 +162,35 @@ public struct ColbertModel {
         }
 
         print(
-            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(chunks.count) chunk(s)"
+            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(tokenChunks.count) chunk(s)"
         )
 
         return allEmbeddings
     }
 
-    /// Process chunks in batches for optimal performance
-    private func encodeChunksBatched(_ chunks: [String]) throws -> [[Float]] {
+    /// Process chunks in batches for optimal performance (optimized token ID path)
+    private func encodeChunksBatchedOptimized(_ tokenChunks: [[Int]]) throws -> [[Float]] {
         var allEmbeddings: [[Float]] = []
-        allEmbeddings.reserveCapacity(chunks.count * config.documentLength / 2)
+        allEmbeddings.reserveCapacity(tokenChunks.count * config.documentLength / 2)
 
         let batchSize = config.batchSize  // Use configured batch size (default 32)
-        let totalBatches = (chunks.count + batchSize - 1) / batchSize
+        let totalBatches = (tokenChunks.count + batchSize - 1) / batchSize
 
         var lastReportedPercent = 0
 
         for batchIndex in 0 ..< totalBatches {
             let startIdx = batchIndex * batchSize
-            let endIdx = min(startIdx + batchSize, chunks.count)
-            let batchChunks = Array(chunks[startIdx ..< endIdx])
+            let endIdx = min(startIdx + batchSize, tokenChunks.count)
+            let batchTokenChunks = Array(tokenChunks[startIdx ..< endIdx])
 
             // Filter empty chunks
-            let validChunks = batchChunks.filter {
-                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
+            let validChunks = batchTokenChunks.filter { !$0.isEmpty }
 
             guard !validChunks.isEmpty else { continue }
 
-            // Process entire batch in single model call
+            // Process entire batch in single model call (optimized token ID path)
             let batchResults = try generator.generateEmbeddingsBatch(
-                for: validChunks,
+                fromTokenIds: validChunks,
                 isQuery: false,
                 maxLength: config.documentLength
             )
@@ -196,7 +210,7 @@ public struct ColbertModel {
             if percentComplete >= lastReportedPercent + 10 {
                 let chunksProcessed = endIdx
                 print(
-                    "   Encoding progress: \(percentComplete)% (\(chunksProcessed)/\(chunks.count) chunks) [batch \(batchIndex + 1)/\(totalBatches)]"
+                    "   Encoding progress: \(percentComplete)% (\(chunksProcessed)/\(tokenChunks.count) chunks) [batch \(batchIndex + 1)/\(totalBatches)]"
                 )
                 lastReportedPercent = percentComplete
             }
@@ -207,7 +221,7 @@ public struct ColbertModel {
         }
 
         print(
-            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(chunks.count) chunk(s)"
+            "✅ Chunking complete: \(allEmbeddings.count) total embeddings from \(tokenChunks.count) chunk(s)"
         )
 
         return allEmbeddings

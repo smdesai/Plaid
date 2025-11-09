@@ -109,6 +109,30 @@ public class ColbertTokenizer: TokenizerProtocol {
         return inputTokens
     }
 
+    /// Build model-ready token sequence from pre-tokenized IDs (performance optimized)
+    /// Skips tokenization and directly adds special tokens and padding
+    public func buildModelTokensFromIds(tokenIds: [Int], isQuery: Bool) -> [Int] {
+        var tokens = tokenIds
+
+        let prefixTokenCount = 2  // Account for [BOS] and [Q]/[D] tokens
+
+        if tokens.count + prefixTokenCount > maxLen {
+            tokens = Array(tokens[..<(maxLen - prefixTokenCount)])
+        }
+
+        let paddingCount = maxLen - tokens.count - prefixTokenCount
+
+        let prefixToken = isQuery ? queryTokenId : docTokenId
+        let repeatingTokenId = isQuery ? queryPadTokenId : docPadTokenId
+        let inputTokens: [Int] =
+            [1]
+            + [prefixToken]
+            + tokens
+            + Array(repeating: repeatingTokenId, count: paddingCount)
+
+        return inputTokens
+    }
+
     public var queryPadTokenIdentifier: Int { queryPadTokenId }
     public var docPadTokenIdentifier: Int { docPadTokenId }
     public var maxSequenceLength: Int { maxLen }

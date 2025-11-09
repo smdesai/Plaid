@@ -46,6 +46,23 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         maxLength: Int
     ) throws -> ColbertEmbeddingBatch {
         let inputIds = tokenizer.buildModelTokens(sentence: sentence, isQuery: isQuery)
+        return try generateEmbeddingsFromInputIds(inputIds, isQuery: isQuery, maxLength: maxLength)
+    }
+
+    public func generateEmbeddings(
+        fromTokenIds tokenIds: [Int],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> ColbertEmbeddingBatch {
+        let inputIds = tokenizer.buildModelTokensFromIds(tokenIds: tokenIds, isQuery: isQuery)
+        return try generateEmbeddingsFromInputIds(inputIds, isQuery: isQuery, maxLength: maxLength)
+    }
+
+    private func generateEmbeddingsFromInputIds(
+        _ inputIds: [Int],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> ColbertEmbeddingBatch {
         let effectiveLength = min(maxLength, maxSequenceLength)
         let padTokenId =
             isQuery ? tokenizer.queryPadTokenIdentifier : tokenizer.docPadTokenIdentifier
@@ -104,19 +121,52 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
             ]
         }
 
+        let tokenIdBatches = sentences.map {
+            tokenizer.buildModelTokens(sentence: $0, isQuery: isQuery)
+        }
+        return try generateEmbeddingsBatchFromInputIds(
+            tokenIdBatches, isQuery: isQuery, maxLength: maxLength)
+    }
+
+    /// Batch processing from pre-tokenized IDs (most efficient)
+    public func generateEmbeddingsBatch(
+        fromTokenIds tokenIdBatch: [[Int]],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> [ColbertEmbeddingBatch] {
+        guard !tokenIdBatch.isEmpty else { return [] }
+
+        // Single batch - use standard path
+        if tokenIdBatch.count == 1 {
+            return try [
+                generateEmbeddings(
+                    fromTokenIds: tokenIdBatch[0], isQuery: isQuery, maxLength: maxLength)
+            ]
+        }
+
+        let inputIdBatches = tokenIdBatch.map {
+            tokenizer.buildModelTokensFromIds(tokenIds: $0, isQuery: isQuery)
+        }
+        return try generateEmbeddingsBatchFromInputIds(
+            inputIdBatches, isQuery: isQuery, maxLength: maxLength)
+    }
+
+    private func generateEmbeddingsBatchFromInputIds(
+        _ inputIdBatches: [[Int]],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> [ColbertEmbeddingBatch] {
         let effectiveLength = min(maxLength, maxSequenceLength)
         let padTokenId =
             isQuery ? tokenizer.queryPadTokenIdentifier : tokenizer.docPadTokenIdentifier
 
-        // Build individual inputs for each sentence
+        // Build individual inputs for each token sequence
         var batchInputs: [MLDictionaryFeatureProvider] = []
         var allAttentionMasks: [[Int]] = []
-        batchInputs.reserveCapacity(sentences.count)
-        allAttentionMasks.reserveCapacity(sentences.count)
+        batchInputs.reserveCapacity(inputIdBatches.count)
+        allAttentionMasks.reserveCapacity(inputIdBatches.count)
 
-        for sentence in sentences {
-            let inputIds = tokenizer.buildModelTokens(sentence: sentence, isQuery: isQuery)
-
+        for inputIds in inputIdBatches {
             var attentionMask: [Int] = []
             attentionMask.reserveCapacity(inputIds.count)
             for (idx, token) in inputIds.enumerated() {
@@ -131,7 +181,7 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
                 }
             }
 
-            // Create individual MLMultiArray for this sentence
+            // Create individual MLMultiArray for this sequence
             let inputIdsArray = try MLMultiArray.makeInt32Batch(values: inputIds)
             let attentionArray = try MLMultiArray.makeInt32Batch(values: attentionMask)
 
@@ -192,6 +242,10 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
             }
         #endif
         throw LFM2ColbertGeneratorError.modelNotFound
+    }
+
+    public func tokenizeToIds(text: String) -> [Int] {
+        return tokenizer.tokenizeToIds(text: text)
     }
 
     private static func buildSkiplist(tokenizer: ColbertTokenizer, words: [String])

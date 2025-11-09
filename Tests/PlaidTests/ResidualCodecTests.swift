@@ -192,7 +192,6 @@ final class ResidualCodecTests: XCTestCase {
         // Create index - this will use the fixed quantization
         try Plaid.create(
             indexURL: indexURL,
-            device: "cpu",
             embeddingDim: embeddingDim,
             nbits: nbits,
             embeddings: documents,
@@ -244,7 +243,6 @@ final class ResidualCodecTests: XCTestCase {
 
         let results = try Plaid.loadAndSearch(
             indexURL: indexURL,
-            device: "cpu",
             queries: queries,
             searchParameters: params,
             showProgress: false,
