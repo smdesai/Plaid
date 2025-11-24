@@ -11,10 +11,17 @@ class SearchEngine: ObservableObject {
     @Published var indexState: IndexState?
     @Published var errorMessage: String?
     @Published var currentModel: ModelType?
+    @Published var modelReady = false
 
     private let indexURL: URL
     private var tokenizer: ColbertTokenizer?
     private var colbert: ColbertModel?
+
+    /// ObjectBox metadata provider for document storage
+    private let metadataProvider = ObjectBoxMetadataProvider.shared
+
+    /// Index name for ObjectBox metadata
+    private let indexName = "default"
 
     private var embeddingDim: Int = 128  // Will be set based on model
     private let nbits = 2
@@ -119,6 +126,7 @@ class SearchEngine: ObservableObject {
     }
 
     /// Create a new index from documents
+    /// Each document is chunked and each chunk becomes a separate searchable unit
     func createIndex(documents: [Document]) async throws {
         guard let colbert = colbert else {
             throw SearchEngineError.modelNotInitialized
@@ -132,55 +140,89 @@ class SearchEngine: ObservableObject {
             errorMessage = nil
         }
 
-        var allEmbeddings: [[[Float]]] = []
+        // Each chunk gets its own plaidDocId, stored as separate embedding array
+        var allChunkEmbeddings: [[[Float]]] = []
+        var chunksForObjectBox:
+            [(
+                plaidDocId: Int, documentName: String, chunkText: String, chunkIndex: Int,
+                filePath: String?
+            )] = []
         var documentMetadata: [Int: DocumentMetadata] = [:]
+        var currentPlaidDocId = 0
 
-        // Encode each document
-        for (index, doc) in documents.enumerated() {
+        // Encode each document using chunk-aware encoding
+        for (docIndex, doc) in documents.enumerated() {
             await MainActor.run {
                 currentDocument = doc.filename
-                indexingProgress = Double(index) / Double(documents.count)
+                indexingProgress = Double(docIndex) / Double(documents.count)
             }
 
-            print("📄 Encoding document [\(index + 1)/\(documents.count)]: \(doc.filename)")
-            let embeddings = try colbert.encode(sentence: doc.text, isQuery: false)
-            allEmbeddings.append(embeddings)
+            print("📄 Encoding document [\(docIndex + 1)/\(documents.count)]: \(doc.filename)")
 
-            documentMetadata[index] = DocumentMetadata(
-                id: index,
-                filename: doc.filename,
-                addedAt: Date(),
-                characterCount: doc.text.count,
-                embeddingCount: embeddings.count,
-                text: doc.text
+            // Use encodeDocument to get individual chunks with their text
+            let chunkedResult = try colbert.encodeDocument(doc.text)
+
+            print(
+                "  ✅ \(chunkedResult.chunks.count) chunks, \(chunkedResult.totalEmbeddingCount) total embeddings"
             )
 
-            print("  ✅ \(embeddings.count) embeddings generated")
+            // Each chunk becomes a separate entry in Plaid index
+            for chunk in chunkedResult.chunks {
+                // Store chunk embeddings for Plaid
+                allChunkEmbeddings.append(chunk.embeddings)
+
+                // Store chunk metadata for ObjectBox
+                chunksForObjectBox.append(
+                    (
+                        plaidDocId: currentPlaidDocId,
+                        documentName: doc.filename,
+                        chunkText: chunk.text,
+                        chunkIndex: chunk.chunkIndex,
+                        filePath: nil
+                    ))
+
+                // Track in document metadata
+                documentMetadata[currentPlaidDocId] = DocumentMetadata(
+                    id: currentPlaidDocId,
+                    filename: doc.filename,
+                    addedAt: Date(),
+                    characterCount: chunk.text.count,
+                    embeddingCount: chunk.embeddings.count,
+                    text: chunk.text,
+                    originalDocId: docIndex
+                )
+
+                currentPlaidDocId += 1
+            }
         }
 
-        // Generate centroids
+        // Generate centroids from all chunk embeddings
         print("🎯 Generating centroids...")
-        let centroids = try generateCentroids(from: allEmbeddings)
+        let centroids = try generateCentroids(from: allChunkEmbeddings)
         print("  ✅ Generated \(centroids.count) centroids")
 
-        // Create index
-        print("💾 Creating Plaid index...")
+        // Create Plaid index - each chunk is a separate "document"
+        print("💾 Creating Plaid index with \(allChunkEmbeddings.count) chunks...")
         try Plaid.create(
             indexURL: indexURL,
             embeddingDim: embeddingDim,
             nbits: nbits,
-            embeddings: allEmbeddings,
+            embeddings: allChunkEmbeddings,
             centroids: centroids,
             batchSize: 64
         )
 
-        // Save metadata
-        let totalEmbeddings = allEmbeddings.reduce(0) { $0 + $1.count }
+        // Store chunk metadata in ObjectBox
+        print("📦 Storing \(chunksForObjectBox.count) chunk metadata entries in ObjectBox...")
+        try await metadataProvider.registerDocuments(chunksForObjectBox, indexName: indexName)
+
+        // Save index state
+        let totalEmbeddings = allChunkEmbeddings.reduce(0) { $0 + $1.count }
         self.indexState = IndexState(
             documents: documentMetadata,
             createdAt: Date(),
             lastModified: Date(),
-            totalDocuments: documents.count,
+            totalDocuments: allChunkEmbeddings.count,
             totalEmbeddings: totalEmbeddings
         )
         try saveIndexState()
@@ -191,10 +233,14 @@ class SearchEngine: ObservableObject {
             indexingProgress = 1.0
         }
 
-        print("✅ Index created successfully! \(totalEmbeddings) total embeddings")
+        print("✅ Index created successfully!")
+        print(
+            "   📊 \(documents.count) documents → \(allChunkEmbeddings.count) chunks → \(totalEmbeddings) embeddings"
+        )
     }
 
-    /// Search the index with a query
+    /// Search the index using Plaid's native MaxSim (late interaction) scoring
+    /// This is the proper ColBERT approach - each query token finds its best matching document token
     func search(query: String, topK: Int = 5) async throws -> [SearchResult] {
         guard let colbert = colbert else {
             throw SearchEngineError.modelNotInitialized
@@ -210,13 +256,31 @@ class SearchEngine: ObservableObject {
         let queryEmbedding = try colbert.encode(sentence: query, isQuery: true)
         print("  ✅ Query encoded: \(queryEmbedding.count) embeddings")
 
-        // Search index
+        // Use Plaid's native MaxSim scoring - this is the correct ColBERT late interaction
+        return try await maxSimSearch(
+            queryEmbedding: queryEmbedding,
+            indexState: indexState,
+            topK: topK
+        )
+    }
+
+    /// MaxSim search using Plaid's native late interaction scoring
+    /// This is the proper ColBERT approach where each query token finds its best document token match
+    private func maxSimSearch(
+        queryEmbedding: [[Float]],
+        indexState: IndexState,
+        topK: Int
+    ) async throws -> [SearchResult] {
+        let startTime = DispatchTime.now()
+
+        // Use Plaid's native MaxSim scoring on all chunks
+        // nFullScores determines how many candidates get full scoring
         let params = SearchParameters(
             batchSize: 1,
-            nFullScores: indexState.totalDocuments,
+            nFullScores: indexState.totalDocuments,  // Score ALL chunks with MaxSim
             topK: topK,
-            nIvfProbe: 8,
-            logTiming: true
+            nIvfProbe: min(32, indexState.totalDocuments),  // Probe more clusters for better recall
+            logTiming: false
         )
 
         let results = try Plaid.loadAndSearch(
@@ -224,31 +288,38 @@ class SearchEngine: ObservableObject {
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
-            preloadIndex: false
+            preloadIndex: true
         )
 
+        let searchTime =
+            Double(DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
+
         guard let firstResult = results.first else {
+            print("  ❌ No results returned")
             return []
         }
 
-        print("  ✅ Found \(firstResult.passageIds.count) results")
+        print(
+            "  🎯 MaxSim scored \(indexState.totalDocuments) chunks in \(String(format: "%.1f", searchTime))ms"
+        )
 
-        // Map results to documents
-        let searchResults = zip(firstResult.passageIds, firstResult.scores).compactMap {
-            docId, score -> SearchResult? in
-            guard let metadata = indexState.documents[docId] else {
-                print("  ⚠️  Warning: Document ID \(docId) not found in metadata")
-                return nil
-            }
-            return SearchResult(
-                documentId: docId,
-                filename: metadata.filename,
-                score: score,
-                text: metadata.text
+        // Enrich results with metadata
+        let enrichedResults = try await firstResult.enriched(
+            from: metadataProvider,
+            indexName: indexName
+        )
+
+        print("  ✅ Found \(enrichedResults.count) results")
+
+        return enrichedResults.map { enriched in
+            SearchResult(
+                documentId: enriched.plaidDocId,
+                filename: enriched.documentName,
+                chunkIndex: enriched.chunkIndex,
+                score: enriched.score,
+                text: enriched.chunkText
             )
         }
-
-        return searchResults
     }
 
     /// Generate centroids from embeddings using uniform sampling
@@ -312,6 +383,68 @@ class SearchEngine: ObservableObject {
         return try decoder.decode(IndexState.self, from: data)
     }
 
+    /// Index all text files in a directory
+    /// Reads .txt, .md, .swift, .json, and other text files from the directory
+    func indexDirectory(at directoryURL: URL) async throws {
+        guard colbert != nil else {
+            throw SearchEngineError.modelNotInitialized
+        }
+
+        print("📁 Indexing directory: \(directoryURL.path)")
+
+        // Find all text files in the directory
+        let supportedExtensions = [
+            "txt", "md", "swift", "json", "xml", "html", "css", "js", "ts", "py", "rs", "go",
+            "java", "kt", "c", "h", "cpp", "hpp",
+        ]
+
+        let fileManager = FileManager.default
+        var documents: [Document] = []
+
+        // Enumerate files in directory (non-recursive for now)
+        let contents = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .contentTypeKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for fileURL in contents {
+            let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard resourceValues?.isRegularFile == true else { continue }
+
+            let ext = fileURL.pathExtension.lowercased()
+            guard supportedExtensions.contains(ext) else { continue }
+
+            do {
+                let text = try String(contentsOf: fileURL, encoding: .utf8)
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+
+                let filename = fileURL.lastPathComponent
+                documents.append(Document(filename: filename, text: text))
+                print("  📄 Found: \(filename) (\(text.count) chars)")
+            } catch {
+                print("  ⚠️  Skipping \(fileURL.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        guard !documents.isEmpty else {
+            throw NSError(
+                domain: "PlaidDemo",
+                code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "No supported text files found in directory"
+                ]
+            )
+        }
+
+        print("📚 Found \(documents.count) documents to index")
+
+        // Create the index
+        try await createIndex(documents: documents)
+    }
+
     /// Delete the entire index and reset state
     func deleteIndex() async throws {
         print("🗑️ Deleting index...")
@@ -321,6 +454,10 @@ class SearchEngine: ObservableObject {
             try FileManager.default.removeItem(at: indexURL)
             print("  ✅ Index directory removed")
         }
+
+        // Delete ObjectBox metadata for this index
+        try await metadataProvider.deleteIndex(indexName: indexName)
+        print("  ✅ ObjectBox metadata deleted")
 
         // Recreate empty directory
         try FileManager.default.createDirectory(

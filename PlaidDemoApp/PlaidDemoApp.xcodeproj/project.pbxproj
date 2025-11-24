@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		7B4E75EA2EBE627F00D1DAE0 /* ModelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */; };
 		7B4E75EC2EBE629200D1DAE0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */; };
+		7B5AC46F2ED17BC100E7D998 /* ObjectBox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */; };
+		7B5AC4702ED17BC100E7D998 /* ObjectBox.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7B5AC4802ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5AC47F2ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift */; };
 		7BD6BE0E2EBD304E0045A16C /* health_tips_es.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE052EBD304E0045A16C /* health_tips_es.txt */; };
 		7BD6BE0F2EBD304E0045A16C /* swift_programming_ja.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE0A2EBD304E0045A16C /* swift_programming_ja.txt */; };
 		7BD6BE102EBD304E0045A16C /* swift_programming_fr.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE092EBD304E0045A16C /* swift_programming_fr.txt */; };
@@ -33,9 +36,25 @@
 		AA0020 /* Plaid in Frameworks */ = {isa = PBXBuildFile; productRef = AA0019 /* Plaid */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		7B5AC4712ED17BC100E7D998 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				7B5AC4702ED17BC100E7D998 /* ObjectBox.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreferences.swift; sourceTree = "<group>"; };
 		7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ObjectBox.xcframework; path = Frameworks/ObjectBox.xcframework; sourceTree = "<group>"; };
+		7B5AC47F2ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectBoxMetadataProvider.swift; sourceTree = "<group>"; };
 		7BD6BE052EBD304E0045A16C /* health_tips_es.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_es.txt; sourceTree = "<group>"; };
 		7BD6BE062EBD304E0045A16C /* health_tips_fr.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_fr.txt; sourceTree = "<group>"; };
 		7BD6BE072EBD304E0045A16C /* health_tips_ja.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_ja.txt; sourceTree = "<group>"; };
@@ -65,6 +84,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B5AC46F2ED17BC100E7D998 /* ObjectBox.xcframework in Frameworks */,
 				AA0020 /* Plaid in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -72,10 +92,27 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		7B5AC46D2ED17BC100E7D998 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7B5AC47E2ED17D5600E7D998 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				7B5AC47F2ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
 		AA8000 = {
 			isa = PBXGroup;
 			children = (
 				AA8100 /* PlaidDemoApp */,
+				7B5AC46D2ED17BC100E7D998 /* Frameworks */,
 				AA8200 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -84,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0101 /* PlaidDemoApp.swift */,
+				7B5AC47E2ED17D5600E7D998 /* Storage */,
 				AA8110 /* Models */,
 				AA8120 /* Views */,
 				AA8130 /* Resources */,
@@ -168,6 +206,7 @@
 				AA9010 /* Sources */,
 				AA9000 /* Frameworks */,
 				AA9020 /* Resources */,
+				7B5AC4712ED17BC100E7D998 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -254,6 +293,7 @@
 				7B4E75EA2EBE627F00D1DAE0 /* ModelPreferences.swift in Sources */,
 				AA0005 /* ResultCard.swift in Sources */,
 				AA0006 /* IndexState.swift in Sources */,
+				7B5AC4802ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift in Sources */,
 				AA0007 /* SearchEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

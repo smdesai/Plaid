@@ -9,33 +9,33 @@ struct ResultCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with filename and score
+            // Header with filename and chunk info
             HStack {
                 Image(systemName: "doc.text.fill")
                     .foregroundColor(.blue)
 
-                Text(result.filename)
+                Text(result.displayName)
                     .font(.headline)
                     .lineLimit(1)
 
                 Spacer()
 
-                // Score badge (commented out for now)
-                //                Text(String(format: "%.2f", result.score))
-                //                    .font(.caption)
-                //                    .fontWeight(.semibold)
-                //                    .foregroundColor(.white)
-                //                    .padding(.horizontal, 8)
-                //                    .padding(.vertical, 4)
-                //                    .background(scoreColor)
-                //                    .cornerRadius(8)
+                // Score badge
+                Text(String(format: "%.0f%%", result.score * 100))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(scoreColor)
+                    .cornerRadius(8)
             }
 
-            // Text snippet
+            // Chunk text (the relevant passage)
             Text(result.snippet)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-                .lineLimit(3)
+                .lineLimit(5)
 
             // Visual separator
             Rectangle()
@@ -52,19 +52,16 @@ struct ResultCard: View {
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 
-    // Color coding removed for now
-    //    private var scoreColor: Color {
-    //        let score = result.score
-    //        // ColBERT scores typically range from 0-50+
-    //        // High relevance: > 30, Medium: 15-30, Low: < 15
-    //        if score >= 30 {
-    //            return .green
-    //        } else if score >= 15 {
-    //            return .orange
-    //        } else {
-    //            return .gray
-    //        }
-    //    }
+    private var scoreColor: Color {
+        let score = result.score
+        if score >= 0.7 {
+            return .green
+        } else if score >= 0.4 {
+            return .orange
+        } else {
+            return .gray
+        }
+    }
 }
 
 #Preview {
@@ -73,6 +70,7 @@ struct ResultCard: View {
             result: SearchResult(
                 documentId: 0,
                 filename: "swift_programming.txt",
+                chunkIndex: 0,
                 score: 0.92,
                 text:
                     "Swift is a powerful and intuitive programming language for iOS, macOS, watchOS, and tvOS. Writing Swift code is interactive and fun, the syntax is concise yet expressive."
@@ -82,6 +80,7 @@ struct ResultCard: View {
             result: SearchResult(
                 documentId: 1,
                 filename: "health_tips.txt",
+                chunkIndex: 2,
                 score: 0.45,
                 text:
                     "Regular exercise is important for maintaining good health. Try to get at least 30 minutes of moderate activity most days of the week."
@@ -91,6 +90,7 @@ struct ResultCard: View {
             result: SearchResult(
                 documentId: 2,
                 filename: "travel_guide.txt",
+                chunkIndex: 5,
                 score: 0.23,
                 text:
                     "When traveling abroad, always keep important documents secure. Make copies of your passport and store them separately."

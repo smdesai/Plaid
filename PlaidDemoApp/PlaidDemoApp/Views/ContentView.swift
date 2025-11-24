@@ -19,9 +19,11 @@ struct ContentView: View {
                 }
             } else if !isInitialized {
                 LoadingView()
-            } else if searchEngine.hasIndex {
+            } else if searchEngine.modelReady {
+                // Once model is selected and loaded, go to SearchView
                 SearchView(searchEngine: searchEngine)
             } else {
+                // Show WelcomeView for model selection
                 WelcomeView(searchEngine: searchEngine)
             }
         }
@@ -35,11 +37,19 @@ struct ContentView: View {
         initializationError = nil
 
         do {
+            // Try to load with saved model preference
             try await searchEngine.initialize()
+
+            // If model loaded successfully and has an index, mark as ready
+            if searchEngine.currentModel != nil && searchEngine.hasIndex {
+                searchEngine.modelReady = true
+            }
+
             isInitialized = true
         } catch {
             print("❌ Initialization error: \(error)")
-            initializationError = error
+            // If initialization fails, still show WelcomeView for fresh start
+            isInitialized = true
         }
     }
 }

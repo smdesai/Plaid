@@ -17,6 +17,44 @@ public enum ColbertModelError: Error, LocalizedError {
     }
 }
 
+/// Represents a single chunk of a document with its text and embeddings
+public struct DocumentChunk: Sendable {
+    /// The index of this chunk within the original document (0-indexed)
+    public let chunkIndex: Int
+
+    /// The text content of this chunk
+    public let text: String
+
+    /// The ColBERT token embeddings for this chunk
+    public let embeddings: [[Float]]
+
+    public init(chunkIndex: Int, text: String, embeddings: [[Float]]) {
+        self.chunkIndex = chunkIndex
+        self.text = text
+        self.embeddings = embeddings
+    }
+}
+
+/// Result of encoding a document with chunk information preserved
+public struct ChunkedDocumentEmbeddings: Sendable {
+    /// Individual chunks with their text and embeddings
+    public let chunks: [DocumentChunk]
+
+    /// Total number of embeddings across all chunks
+    public var totalEmbeddingCount: Int {
+        chunks.reduce(0) { $0 + $1.embeddings.count }
+    }
+
+    /// All embeddings concatenated (for Plaid indexing)
+    public var allEmbeddings: [[Float]] {
+        chunks.flatMap { $0.embeddings }
+    }
+
+    public init(chunks: [DocumentChunk]) {
+        self.chunks = chunks
+    }
+}
+
 /// Swift port of the PyLate ColBERT orchestration logic.
 ///
 /// This type encapsulates batching, normalization, padding behaviour and
@@ -84,6 +122,76 @@ public struct ColbertModel {
 
         // For documents with a chunker: intelligently split and process each chunk
         return try encodeWithChunking(trimmed, chunker: chunker)
+    }
+
+    /// Encodes a document and returns individual chunks with their text and embeddings.
+    ///
+    /// Unlike `encode()` which concatenates all embeddings, this method preserves
+    /// the chunk boundaries so each chunk can be stored and retrieved separately.
+    /// This enables returning the specific relevant chunk in search results.
+    ///
+    /// - Parameter text: The document text to encode
+    /// - Returns: ChunkedDocumentEmbeddings containing individual chunks with text and embeddings
+    public func encodeDocument(_ text: String) throws -> ChunkedDocumentEmbeddings {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ColbertModelError.emptyInput }
+
+        // If no chunker configured, treat entire document as single chunk
+        guard let chunker = chunker else {
+            let embeddings = try encodeSinglePass(trimmed, isQuery: false)
+            let chunk = DocumentChunk(chunkIndex: 0, text: trimmed, embeddings: embeddings)
+            return ChunkedDocumentEmbeddings(chunks: [chunk])
+        }
+
+        // Get text-based chunks so we preserve the actual chunk text
+        let contentTokenBudget = max(config.documentLength - specialTokenCount, 1)
+        let overlapTokens = min(64, max(contentTokenBudget - 1, 0))
+        let textChunks = chunker.chunk(
+            for: trimmed, chunkSize: contentTokenBudget, overlapSize: overlapTokens)
+
+        guard !textChunks.isEmpty else {
+            throw ColbertModelError.emptyInput
+        }
+
+        print("✅ Document chunked: \(textChunks.count) chunk(s) created")
+
+        // Process each chunk and preserve its text
+        var documentChunks: [DocumentChunk] = []
+        documentChunks.reserveCapacity(textChunks.count)
+
+        for (index, chunkText) in textChunks.enumerated() {
+            guard !chunkText.isEmpty else { continue }
+
+            let generated = try generator.generateEmbeddings(
+                for: chunkText,
+                isQuery: false,
+                maxLength: config.documentLength
+            )
+
+            let chunkEmbeddings = try processBatch(
+                generated.embeddings,
+                attentionMask: generated.attentionMask,
+                isQuery: false
+            )
+
+            let chunk = DocumentChunk(
+                chunkIndex: index,
+                text: chunkText,
+                embeddings: chunkEmbeddings
+            )
+            documentChunks.append(chunk)
+        }
+
+        guard !documentChunks.isEmpty else {
+            throw ColbertModelError.emptyInput
+        }
+
+        let totalEmbeddings = documentChunks.reduce(0) { $0 + $1.embeddings.count }
+        print(
+            "✅ Encoding complete: \(totalEmbeddings) total embeddings from \(documentChunks.count) chunk(s)"
+        )
+
+        return ChunkedDocumentEmbeddings(chunks: documentChunks)
     }
 
     /// Encodes text in a single pass without chunking (original behavior).
