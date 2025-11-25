@@ -330,14 +330,15 @@ class SearchEngine: ObservableObject {
     /// Compute adaptive search parameters based on index size
     /// Balances search quality vs performance for different corpus sizes
     ///
-    /// Note: Decompression is the bottleneck (~40-50ms per chunk on iOS).
-    /// The parameters below balance quality vs search time, given this constraint.
+    /// Note: With parallel decompression + intelligent candidate selection:
+    /// - Decompression is 3.5x faster (parallel on 6 cores)
+    /// - Centroid pre-scoring adds ~20ms overhead but ensures quality
     ///
-    /// Performance characteristics (measured on 1679-chunk index):
-    /// - 80 chunks → ~3.5s (degraded quality for some queries)
-    /// - 150 chunks → ~6.5s (good quality/speed balance)
-    /// - 200 chunks → ~8.5s (excellent quality, slower)
-    /// - 300 chunks → ~13s (overkill for topK=3)
+    /// Performance characteristics (measured on 1679-chunk index with parallel):
+    /// - 150 chunks → ~400ms (fast but some quality loss)
+    /// - 200 chunks → ~530ms (good quality/speed balance) ✅
+    /// - 250 chunks → ~660ms (excellent quality)
+    /// - 300 chunks → ~800ms (near-perfect quality)
     private func adaptiveSearchParams(totalChunks: Int, topK: Int) -> (
         nFullScores: Int, nIvfProbe: Int
     ) {
@@ -348,21 +349,21 @@ class SearchEngine: ObservableObject {
 
         // For medium indices, balance quality and speed
         if totalChunks <= 500 {
-            let nFullScores = min(150, totalChunks)
+            let nFullScores = min(200, totalChunks)
             let nIvfProbe = min(24, totalChunks / 4)
-            return (max(topK * 30, nFullScores), max(8, nIvfProbe))
+            return (max(topK * 40, nFullScores), max(8, nIvfProbe))
         }
 
         // For large indices (500-2000 chunks)
-        // Use 150 chunks as sweet spot: good quality, reasonable speed (~6-7s)
+        // Use 250 chunks: excellent quality with sub-second search (~660ms)
         if totalChunks <= 2000 {
-            let nFullScores = max(topK * 40, 150)  // Score 150 candidates for quality
+            let nFullScores = max(topK * 60, 250)  // Score 250 candidates for quality
             let nIvfProbe = min(32, max(24, totalChunks / 80))  // Probe 24-32 clusters
             return (nFullScores, nIvfProbe)
         }
 
-        // For very large indices, cap at 200 chunks
-        let nFullScores = max(topK * 50, 200)
+        // For very large indices, cap at 300 chunks
+        let nFullScores = max(topK * 80, 300)
         let nIvfProbe = min(48, max(32, totalChunks / 100))
         return (nFullScores, nIvfProbe)
     }
