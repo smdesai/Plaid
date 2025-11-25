@@ -67,7 +67,9 @@ class SearchEngine: ObservableObject {
             generator = try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
         }
 
-        let chunker = TokenSplitter(withTokenizer: tokenizer)
+        // Use SentenceBoundarySplitter for better semantic coherence in chunks
+        // Preserves complete sentences instead of splitting mid-sentence
+        let chunker = SentenceBoundarySplitter(withTokenizer: tokenizer)
 
         // Set embedding dimension based on model
         self.embeddingDim = model.embeddingDimension
@@ -273,13 +275,16 @@ class SearchEngine: ObservableObject {
     ) async throws -> [SearchResult] {
         let startTime = DispatchTime.now()
 
-        // Use Plaid's native MaxSim scoring on all chunks
-        // nFullScores determines how many candidates get full scoring
+        // Adaptive scoring parameters based on index size
+        // IVF pre-filtering identifies candidates, then we do full MaxSim on top candidates
+        let totalChunks = indexState.totalDocuments
+        let (nFullScores, nIvfProbe) = adaptiveSearchParams(totalChunks: totalChunks, topK: topK)
+
         let params = SearchParameters(
             batchSize: 1,
-            nFullScores: indexState.totalDocuments,  // Score ALL chunks with MaxSim
+            nFullScores: nFullScores,
             topK: topK,
-            nIvfProbe: min(32, indexState.totalDocuments),  // Probe more clusters for better recall
+            nIvfProbe: nIvfProbe,
             logTiming: false
         )
 
@@ -300,7 +305,7 @@ class SearchEngine: ObservableObject {
         }
 
         print(
-            "  🎯 MaxSim scored \(indexState.totalDocuments) chunks in \(String(format: "%.1f", searchTime))ms"
+            "  🎯 MaxSim scored \(nFullScores)/\(totalChunks) chunks in \(String(format: "%.1f", searchTime))ms (nIvfProbe=\(nIvfProbe))"
         )
 
         // Enrich results with metadata
@@ -320,6 +325,46 @@ class SearchEngine: ObservableObject {
                 text: enriched.chunkText
             )
         }
+    }
+
+    /// Compute adaptive search parameters based on index size
+    /// Balances search quality vs performance for different corpus sizes
+    ///
+    /// Note: Decompression is the bottleneck (~40-50ms per chunk on iOS).
+    /// The parameters below balance quality vs search time, given this constraint.
+    ///
+    /// Performance characteristics (measured on 1679-chunk index):
+    /// - 80 chunks → ~3.5s (degraded quality for some queries)
+    /// - 150 chunks → ~6.5s (good quality/speed balance)
+    /// - 200 chunks → ~8.5s (excellent quality, slower)
+    /// - 300 chunks → ~13s (overkill for topK=3)
+    private func adaptiveSearchParams(totalChunks: Int, topK: Int) -> (
+        nFullScores: Int, nIvfProbe: Int
+    ) {
+        // For small indices, score everything for perfect recall
+        if totalChunks <= 100 {
+            return (totalChunks, min(16, totalChunks))
+        }
+
+        // For medium indices, balance quality and speed
+        if totalChunks <= 500 {
+            let nFullScores = min(150, totalChunks)
+            let nIvfProbe = min(24, totalChunks / 4)
+            return (max(topK * 30, nFullScores), max(8, nIvfProbe))
+        }
+
+        // For large indices (500-2000 chunks)
+        // Use 150 chunks as sweet spot: good quality, reasonable speed (~6-7s)
+        if totalChunks <= 2000 {
+            let nFullScores = max(topK * 40, 150)  // Score 150 candidates for quality
+            let nIvfProbe = min(32, max(24, totalChunks / 80))  // Probe 24-32 clusters
+            return (nFullScores, nIvfProbe)
+        }
+
+        // For very large indices, cap at 200 chunks
+        let nFullScores = max(topK * 50, 200)
+        let nIvfProbe = min(48, max(32, totalChunks / 100))
+        return (nFullScores, nIvfProbe)
     }
 
     /// Generate centroids from embeddings using uniform sampling
