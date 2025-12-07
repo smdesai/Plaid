@@ -234,12 +234,6 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
                 let compiled = try MLModel.compileModel(at: packageURL)
                 return compiled
             }
-            if let modelURL = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlmodel")
-            {
-                let compiled = try MLModel.compileModel(at: modelURL)
-                return compiled
-            }
         #endif
         throw LFM2ColbertGeneratorError.modelNotFound
     }

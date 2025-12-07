@@ -19,7 +19,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.29.1"),
-        .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.17"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.0"),
     ],
     targets: [
         .target(
@@ -30,8 +30,8 @@ let package = Package(
             ],
             path: "Sources/Plaid",
             resources: [
-                .copy("Model/LFM2Colbert.mlpackage"),
-                .copy("Model/MXBAIEdgeColbert.mlpackage"),
+                .copy("Model/LFM2Colbert.mlmodelc"),
+                .copy("Model/MXBAIEdgeColbert.mlmodelc"),
             ]
         ),
         .testTarget(

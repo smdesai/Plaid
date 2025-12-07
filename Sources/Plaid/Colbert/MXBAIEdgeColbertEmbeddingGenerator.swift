@@ -234,12 +234,6 @@ public final class MXBAIEdgeColbertEmbeddingGenerator: ColbertEmbeddingGenerator
                 let compiled = try MLModel.compileModel(at: packageURL)
                 return compiled
             }
-            if let modelURL = Bundle.module.url(
-                forResource: "MXBAIEdgeColbert", withExtension: "mlmodel")
-            {
-                let compiled = try MLModel.compileModel(at: modelURL)
-                return compiled
-            }
         #endif
         throw MXBAIEdgeColbertGeneratorError.modelNotFound
     }
