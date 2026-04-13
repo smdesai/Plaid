@@ -1,20 +1,23 @@
 import Foundation
-import Hub
+import HFAPI
 import Tokenizers
 
 /// Errors that can occur when using ColbertTokenizer
 public enum ColbertTokenizerError: Error, LocalizedError {
     case invalidTokenizerType
+    case invalidRepositoryId(String)
 
     public var errorDescription: String? {
         switch self {
         case .invalidTokenizerType:
             return "The loaded tokenizer is not a Tokenizer."
+        case .invalidRepositoryId(let id):
+            return "Invalid repository ID: \(id)"
         }
     }
 }
 
-/// A tokenizer that uses Hugging Face's Tokenizer from swift-transformers
+/// A tokenizer that uses Hugging Face's Tokenizer from swift-tokenizers
 /// to load tokenizers from the Hub, specifically designed for ColBERT models.
 public class ColbertTokenizer: TokenizerProtocol {
     private let tokenizer: PreTrainedTokenizer
@@ -27,19 +30,21 @@ public class ColbertTokenizer: TokenizerProtocol {
 
     /// Initialize from a pretrained model on Hugging Face Hub
     public static func from(pretrained modelId: String) async throws -> ColbertTokenizer {
-        guard
-            let tokenizer = try await AutoTokenizer.from(pretrained: modelId)
-                as? PreTrainedTokenizer
-        else {
-            throw ColbertTokenizerError.invalidTokenizerType
+        guard let repoId = Repo.ID(rawValue: modelId) else {
+            throw ColbertTokenizerError.invalidRepositoryId(modelId)
         }
-        return try ColbertTokenizer(tokenizer: tokenizer)
+        let client = HubClient.default
+        let directory = try await client.downloadSnapshot(
+            of: repoId,
+            matching: ["tokenizer.json", "tokenizer_config.json", "special_tokens_map.json"]
+        )
+        return try await from(modelFolder: directory)
     }
 
     /// Initialize from a local model folder
     public static func from(modelFolder: URL) async throws -> ColbertTokenizer {
         guard
-            let tokenizer = try await AutoTokenizer.from(modelFolder: modelFolder)
+            let tokenizer = try await AutoTokenizer.from(directory: modelFolder)
                 as? PreTrainedTokenizer
         else {
             throw ColbertTokenizerError.invalidTokenizerType
@@ -73,7 +78,7 @@ public class ColbertTokenizer: TokenizerProtocol {
     public func detokenize(tokens: [String]) -> String {
         // Convert tokens to IDs and decode
         let ids = tokenizer.convertTokensToIds(tokens).compactMap { $0 }
-        return tokenizer.decode(tokens: ids, skipSpecialTokens: false)
+        return tokenizer.decode(tokenIds: ids, skipSpecialTokens: false)
     }
 
     /// Tokenize text and return token IDs

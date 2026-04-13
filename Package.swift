@@ -18,15 +18,18 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.29.1"),
-        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.0"),
+        //.package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.31.3"),
+        .package(path: "/Users/sachin/Tools/MLX/experimental-batch/mlx-swift"),
+        .package(url: "https://github.com/DePasqualeOrg/swift-tokenizers.git", from: "0.3.2"),
+        .package(url: "https://github.com/DePasqualeOrg/swift-hf-api.git", from: "0.2.2"),
     ],
     targets: [
         .target(
             name: "Plaid",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
-                .product(name: "Transformers", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-tokenizers"),
+                .product(name: "HFAPI", package: "swift-hf-api"),
             ],
             path: "Sources/Plaid",
             resources: [
