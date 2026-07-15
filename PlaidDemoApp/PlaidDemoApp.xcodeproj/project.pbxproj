@@ -34,6 +34,14 @@
 		AA0011 /* health_tips.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA0302 /* health_tips.txt */; };
 		AA0012 /* travel_guide.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA0303 /* travel_guide.txt */; };
 		AA0020 /* Plaid in Frameworks */ = {isa = PBXBuildFile; productRef = AA0019 /* Plaid */; };
+		CB0001 /* ToolSelectionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0101 /* ToolSelectionApp.swift */; };
+		CB0002 /* ToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0102 /* ToolCatalog.swift */; };
+		CB0003 /* ToolSearchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0103 /* ToolSearchModel.swift */; };
+		CB0004 /* ToolSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0104 /* ToolSelectionView.swift */; };
+		CB0005 /* SearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0105 /* SearchField.swift */; };
+		CB0006 /* ToolMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0106 /* ToolMatchCard.swift */; };
+		CB0010 /* colbert_tool_definitions.json in Resources */ = {isa = PBXBuildFile; fileRef = CB0301 /* colbert_tool_definitions.json */; };
+		CB0020 /* Plaid in Frameworks */ = {isa = PBXBuildFile; productRef = CB0019 /* Plaid */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -77,6 +85,14 @@
 		AA0301 /* swift_programming.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = swift_programming.txt; sourceTree = "<group>"; };
 		AA0302 /* health_tips.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips.txt; sourceTree = "<group>"; };
 		AA0303 /* travel_guide.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = travel_guide.txt; sourceTree = "<group>"; };
+		CB0000 /* ToolSelection.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ToolSelection.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB0101 /* ToolSelectionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolSelectionApp.swift; sourceTree = "<group>"; };
+		CB0102 /* ToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCatalog.swift; sourceTree = "<group>"; };
+		CB0103 /* ToolSearchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolSearchModel.swift; sourceTree = "<group>"; };
+		CB0104 /* ToolSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolSelectionView.swift; sourceTree = "<group>"; };
+		CB0105 /* SearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchField.swift; sourceTree = "<group>"; };
+		CB0106 /* ToolMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolMatchCard.swift; sourceTree = "<group>"; };
+		CB0301 /* colbert_tool_definitions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = colbert_tool_definitions.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +102,14 @@
 			files = (
 				7B5AC46F2ED17BC100E7D998 /* ObjectBox.xcframework in Frameworks */,
 				AA0020 /* Plaid in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB9000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB0020 /* Plaid in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				AA8100 /* PlaidDemoApp */,
+				CB8100 /* ToolSelection */,
 				7B5AC46D2ED17BC100E7D998 /* Frameworks */,
 				AA8200 /* Products */,
 			);
@@ -192,8 +217,39 @@
 			isa = PBXGroup;
 			children = (
 				AA0000 /* PlaidDemoApp.app */,
+				CB0000 /* ToolSelection.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CB8100 /* ToolSelection */ = {
+			isa = PBXGroup;
+			children = (
+				CB0101 /* ToolSelectionApp.swift */,
+				CB0102 /* ToolCatalog.swift */,
+				CB0103 /* ToolSearchModel.swift */,
+				CB8120 /* Views */,
+				CB8130 /* Resources */,
+			);
+			path = ToolSelection;
+			sourceTree = "<group>";
+		};
+		CB8120 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CB0104 /* ToolSelectionView.swift */,
+				CB0105 /* SearchField.swift */,
+				CB0106 /* ToolMatchCard.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		CB8130 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				CB0301 /* colbert_tool_definitions.json */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -220,6 +276,26 @@
 			productReference = AA0000 /* PlaidDemoApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		CB9100 /* ToolSelection */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB9200 /* Build configuration list for PBXNativeTarget "ToolSelection" */;
+			buildPhases = (
+				CB9010 /* Sources */,
+				CB9000 /* Frameworks */,
+				CB9020 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ToolSelection;
+			packageProductDependencies = (
+				CB0019 /* Plaid */,
+			);
+			productName = ToolSelection;
+			productReference = CB0000 /* ToolSelection.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -231,6 +307,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					AA9100 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					CB9100 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -252,6 +331,7 @@
 			projectRoot = "";
 			targets = (
 				AA9100 /* PlaidDemoApp */,
+				CB9100 /* ToolSelection */,
 			);
 		};
 /* End PBXProject section */
@@ -278,6 +358,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB9020 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB0010 /* colbert_tool_definitions.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -295,6 +383,19 @@
 				AA0006 /* IndexState.swift in Sources */,
 				7B5AC4802ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift in Sources */,
 				AA0007 /* SearchEngine.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB9010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB0001 /* ToolSelectionApp.swift in Sources */,
+				CB0002 /* ToolCatalog.swift in Sources */,
+				CB0003 /* ToolSearchModel.swift in Sources */,
+				CB0004 /* ToolSelectionView.swift in Sources */,
+				CB0005 /* SearchField.swift in Sources */,
+				CB0006 /* ToolMatchCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -486,6 +587,62 @@
 			};
 			name = Release;
 		};
+		CB9201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TA92TEWDS4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tool Selection";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.ToolSelection;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CB9202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TA92TEWDS4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tool Selection";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.ToolSelection;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -507,6 +664,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		CB9200 /* Build configuration list for PBXNativeTarget "ToolSelection" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB9201 /* Debug */,
+				CB9202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -518,6 +684,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		AA0019 /* Plaid */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0018 /* XCLocalSwiftPackageReference ".." */;
+			productName = Plaid;
+		};
+		CB0019 /* Plaid */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA0018 /* XCLocalSwiftPackageReference ".." */;
 			productName = Plaid;

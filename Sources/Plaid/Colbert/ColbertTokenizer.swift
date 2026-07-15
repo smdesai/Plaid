@@ -1,5 +1,5 @@
 import Foundation
-import HFAPI
+import HuggingFace
 import Tokenizers
 
 /// Errors that can occur when using ColbertTokenizer
@@ -20,7 +20,7 @@ public enum ColbertTokenizerError: Error, LocalizedError {
 /// A tokenizer that uses Hugging Face's Tokenizer from swift-tokenizers
 /// to load tokenizers from the Hub, specifically designed for ColBERT models.
 public class ColbertTokenizer: TokenizerProtocol {
-    private let tokenizer: PreTrainedTokenizer
+    private let tokenizer: any Tokenizer
     private let maxLen = 256  // CoreML model
 
     private let queryTokenId: Int
@@ -43,16 +43,13 @@ public class ColbertTokenizer: TokenizerProtocol {
 
     /// Initialize from a local model folder
     public static func from(modelFolder: URL) async throws -> ColbertTokenizer {
-        guard
-            let tokenizer = try await AutoTokenizer.from(directory: modelFolder)
-                as? PreTrainedTokenizer
-        else {
-            throw ColbertTokenizerError.invalidTokenizerType
-        }
+        // swift-tokenizers 0.7.x returns the public `Tokenizer` protocol directly;
+        // the concrete `PreTrainedTokenizer` is now `package`-internal and not visible here.
+        let tokenizer = try await AutoTokenizer.from(modelFolder: modelFolder)
         return try ColbertTokenizer(tokenizer: tokenizer)
     }
 
-    private init(tokenizer: PreTrainedTokenizer) throws {
+    private init(tokenizer: any Tokenizer) throws {
         self.tokenizer = tokenizer
 
         // Get special token IDs
@@ -71,21 +68,22 @@ public class ColbertTokenizer: TokenizerProtocol {
     }
 
     public func tokenize(text: String) -> [String] {
-        // Use the tokenizer's tokenize method
-        return tokenizer.tokenize(text: text)
+        // Use the tokenizer's tokenize method. swift-tokenizers 0.7.x throws on
+        // failure; TokenizerProtocol is non-throwing, so fall back to empty.
+        return (try? tokenizer.tokenize(text: text)) ?? []
     }
 
     public func detokenize(tokens: [String]) -> String {
         // Convert tokens to IDs and decode
         let ids = tokenizer.convertTokensToIds(tokens).compactMap { $0 }
-        return tokenizer.decode(tokenIds: ids, skipSpecialTokens: false)
+        return (try? tokenizer.decode(tokens: ids, skipSpecialTokens: false)) ?? ""
     }
 
     /// Tokenize text and return token IDs
     public func tokenizeToIds(text: String) -> [Int] {
         // Use the tokenizer's encode method with no special tokens
         // (we'll add them manually in buildModelTokens)
-        return tokenizer.encode(text: text, addSpecialTokens: false)
+        return (try? tokenizer.encode(text: text, addSpecialTokens: false)) ?? []
     }
 
     /// Build model-ready token sequence with special tokens and padding

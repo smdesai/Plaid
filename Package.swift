@@ -20,20 +20,21 @@ let package = Package(
     dependencies: [
         //.package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.31.3"),
         .package(path: "/Users/sachin/Tools/MLX/experimental-batch/mlx-swift"),
-        .package(url: "https://github.com/DePasqualeOrg/swift-tokenizers.git", from: "0.3.2"),
-        .package(url: "https://github.com/DePasqualeOrg/swift-hf-api.git", from: "0.2.2"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", from: "0.8.1"),
     ],
     targets: [
         .target(
             name: "Plaid",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
-                .product(name: "Tokenizers", package: "swift-tokenizers"),
-                .product(name: "HFAPI", package: "swift-hf-api"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "HuggingFace", package: "swift-huggingface"),
             ],
             path: "Sources/Plaid",
             resources: [
                 .copy("Model/LFM2Colbert.mlmodelc"),
+                .copy("Model/LFM2ColbertQuant4.mlmodelc"),
                 .copy("Model/MXBAIEdgeColbert.mlmodelc"),
             ]
         ),

@@ -29,9 +29,10 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
     public init(
         tokenizer: ColbertTokenizer,
         configuration: MLModelConfiguration = MLModelConfiguration(),
-        skiplistWords: [String]? = nil
+        skiplistWords: [String]? = nil,
+        modelResourceName: String = "LFM2Colbert"
     ) throws {
-        let modelURL = try Self.locateModelURL()
+        let modelURL = try Self.locateModelURL(resourceName: modelResourceName)
         configuration.computeUnits = .cpuAndGPU
         self.model = try MLModel(contentsOf: modelURL, configuration: configuration)
         self.tokenizer = tokenizer
@@ -221,15 +222,15 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         return results
     }
 
-    private static func locateModelURL() throws -> URL {
+    private static func locateModelURL(resourceName: String = "LFM2Colbert") throws -> URL {
         #if SWIFT_PACKAGE
             if let compiled = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlmodelc")
+                forResource: resourceName, withExtension: "mlmodelc")
             {
                 return compiled
             }
             if let packageURL = Bundle.module.url(
-                forResource: "LFM2Colbert", withExtension: "mlpackage")
+                forResource: resourceName, withExtension: "mlpackage")
             {
                 let compiled = try MLModel.compileModel(at: packageURL)
                 return compiled
