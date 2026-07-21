@@ -1,0 +1,3156 @@
+[
+  {
+    "domain": "ecommerce",
+    "tools": [
+      {
+        "name": "search_products",
+        "description": "Search the product catalog by keyword and narrow results with category, color, price, and sort filters.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "free-text search terms"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "furniture",
+                "lighting",
+                "rugs",
+                "decor",
+                "outdoor",
+                "bedding",
+                "kitchen",
+                "storage"
+              ]
+            },
+            "color": {
+              "type": "string",
+              "enum": [
+                "black",
+                "white",
+                "gray",
+                "blue",
+                "green",
+                "red",
+                "beige",
+                "brown",
+                "gold"
+              ]
+            },
+            "price_range": {
+              "type": "string",
+              "enum": [
+                "under_50",
+                "50_to_150",
+                "150_to_500",
+                "over_500"
+              ]
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "relevance",
+                "price_low_to_high",
+                "price_high_to_low",
+                "rating",
+                "newest"
+              ]
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "get_product_details",
+        "description": "Fetch the full specification, photos, dimensions, and price for one product.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string",
+              "description": "catalog id of the product"
+            }
+          },
+          "required": [
+            "product_id"
+          ]
+        }
+      },
+      {
+        "name": "check_inventory",
+        "description": "Check whether a product is in stock, optionally for a specific store or region.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string"
+            },
+            "fulfillment": {
+              "type": "string",
+              "enum": [
+                "ship_to_home",
+                "pickup_in_store",
+                "same_day_delivery"
+              ]
+            }
+          },
+          "required": [
+            "product_id"
+          ]
+        }
+      },
+      {
+        "name": "add_to_cart",
+        "description": "Add a product to the shopping cart with a chosen quantity.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "product_id"
+          ]
+        }
+      },
+      {
+        "name": "remove_from_cart",
+        "description": "Remove a product from the shopping cart.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "product_id"
+          ]
+        }
+      },
+      {
+        "name": "apply_coupon",
+        "description": "Apply a promo or discount code to the current cart before checkout.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "coupon_code": {
+              "type": "string",
+              "description": "the promo code to redeem"
+            }
+          },
+          "required": [
+            "coupon_code"
+          ]
+        }
+      },
+      {
+        "name": "place_order",
+        "description": "Check out the current cart and place the order for payment and fulfillment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "payment_method": {
+              "type": "string",
+              "enum": [
+                "card_on_file",
+                "paypal",
+                "gift_card",
+                "affirm"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "cancel_order",
+        "description": "Cancel an order that has not shipped yet.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ordered_by_mistake",
+                "found_better_price",
+                "shipping_too_slow",
+                "changed_mind"
+              ]
+            }
+          },
+          "required": [
+            "order_id"
+          ]
+        }
+      },
+      {
+        "name": "track_shipment",
+        "description": "Get the current delivery status and estimated arrival for an order.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "order_id"
+          ]
+        }
+      },
+      {
+        "name": "initiate_return",
+        "description": "Start a return for a delivered item and generate a return shipping label.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "damaged",
+                "defective",
+                "wrong_item",
+                "not_as_described",
+                "no_longer_needed",
+                "too_big",
+                "too_small"
+              ]
+            }
+          },
+          "required": [
+            "order_id",
+            "reason"
+          ]
+        }
+      },
+      {
+        "name": "request_refund",
+        "description": "Request a refund to the original payment method for a returned or cancelled order.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "type": "string"
+            },
+            "refund_to": {
+              "type": "string",
+              "enum": [
+                "original_payment",
+                "store_credit"
+              ]
+            }
+          },
+          "required": [
+            "order_id"
+          ]
+        }
+      },
+      {
+        "name": "write_review",
+        "description": "Submit a star rating and written review for a purchased product.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string"
+            },
+            "rating": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "4",
+                "5"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "description": "the review text"
+            }
+          },
+          "required": [
+            "product_id",
+            "rating"
+          ]
+        }
+      },
+      {
+        "name": "get_recommendations",
+        "description": "Get personalized product recommendations, optionally scoped to a category.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "furniture",
+                "lighting",
+                "rugs",
+                "decor",
+                "outdoor",
+                "bedding",
+                "kitchen",
+                "storage"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "compare_products",
+        "description": "Build a side-by-side comparison of two or more products' specs and prices.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_ids": {
+              "type": "array",
+              "description": "list of product ids to compare"
+            }
+          },
+          "required": [
+            "product_ids"
+          ]
+        }
+      },
+      {
+        "name": "update_shipping_address",
+        "description": "Change the shipping address on an order that has not shipped.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string",
+              "description": "the new shipping address"
+            }
+          },
+          "required": [
+            "order_id",
+            "address"
+          ]
+        }
+      },
+      {
+        "name": "subscribe_price_alert",
+        "description": "Notify the customer when a product's price drops below a target.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "product_id": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "push"
+              ]
+            }
+          },
+          "required": [
+            "product_id"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "finance",
+    "tools": [
+      {
+        "name": "get_account_balance",
+        "description": "Get the current balance for one of the customer's accounts.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "account_type": {
+              "type": "string",
+              "enum": [
+                "checking",
+                "savings",
+                "credit",
+                "investment",
+                "loan"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_transaction_history",
+        "description": "List recent transactions, optionally filtered by spending category and time period.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "groceries",
+                "dining",
+                "travel",
+                "utilities",
+                "shopping",
+                "income"
+              ]
+            },
+            "period": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "ytd",
+                "1y"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "transfer_funds",
+        "description": "Move money between accounts or to another person.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number"
+            },
+            "transfer_type": {
+              "type": "string",
+              "enum": [
+                "internal",
+                "ach",
+                "wire",
+                "instant"
+              ]
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "pay_bill",
+        "description": "Pay a bill to a registered payee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "payee": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "payee",
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "schedule_payment",
+        "description": "Schedule a recurring or future-dated payment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "payee": {
+              "type": "string"
+            },
+            "frequency": {
+              "type": "string",
+              "enum": [
+                "once",
+                "weekly",
+                "biweekly",
+                "monthly",
+                "quarterly"
+              ]
+            }
+          },
+          "required": [
+            "payee"
+          ]
+        }
+      },
+      {
+        "name": "dispute_transaction",
+        "description": "Open a dispute on a posted transaction.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "transaction_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "unauthorized",
+                "duplicate_charge",
+                "wrong_amount",
+                "not_received",
+                "defective"
+              ]
+            }
+          },
+          "required": [
+            "transaction_id"
+          ]
+        }
+      },
+      {
+        "name": "freeze_card",
+        "description": "Temporarily lock a card to block new charges.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "card_type": {
+              "type": "string",
+              "enum": [
+                "debit",
+                "credit",
+                "virtual"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "order_card",
+        "description": "Order a new or replacement payment card.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "card_type": {
+              "type": "string",
+              "enum": [
+                "debit",
+                "credit",
+                "virtual"
+              ]
+            }
+          },
+          "required": [
+            "card_type"
+          ]
+        }
+      },
+      {
+        "name": "set_spending_limit",
+        "description": "Set a spending limit on a card over a time window.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number"
+            },
+            "period": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ]
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "create_budget",
+        "description": "Create a budget for a spending category.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "groceries",
+                "dining",
+                "travel",
+                "utilities",
+                "shopping",
+                "entertainment"
+              ]
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "category",
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "get_budget_status",
+        "description": "Check how much of a budget has been spent this period.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_statement",
+        "description": "Download an account statement for a period.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string",
+              "enum": [
+                "30d",
+                "90d",
+                "ytd",
+                "1y"
+              ]
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "csv"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_credit_score",
+        "description": "Retrieve the customer's current credit score and factors.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "apply_for_loan",
+        "description": "Start an application for a loan or line of credit.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "loan_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "auto",
+                "mortgage",
+                "student",
+                "business"
+              ]
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "loan_type"
+          ]
+        }
+      },
+      {
+        "name": "convert_currency",
+        "description": "Convert an amount from one currency to another at the current rate.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number"
+            },
+            "from_currency": {
+              "type": "string"
+            },
+            "to_currency": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount",
+            "to_currency"
+          ]
+        }
+      },
+      {
+        "name": "get_investment_portfolio",
+        "description": "View holdings, allocation, and performance of the investment account.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "get_stock_quote",
+        "description": "Get the latest price and movement for a ticker symbol.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      {
+        "name": "set_market_alert",
+        "description": "Notify the customer when a stock crosses a target price.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "push"
+              ]
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      {
+        "name": "get_tax_documents",
+        "description": "Retrieve tax forms and documents for a given year.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "year": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "send_invoice",
+        "description": "Create and send an invoice to a client.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "client": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "client",
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "get_invoice_status",
+        "description": "Check whether an invoice has been paid.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "invoice_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "sent",
+                "paid",
+                "overdue",
+                "void"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "record_expense",
+        "description": "Record a business expense for accounting.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "travel",
+                "meals",
+                "office",
+                "software",
+                "marketing",
+                "payroll"
+              ]
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "reconcile_account",
+        "description": "Reconcile an account's transactions against a statement.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "account_type": {
+              "type": "string",
+              "enum": [
+                "checking",
+                "savings",
+                "credit"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_cash_flow",
+        "description": "Summarize money in versus money out over a period.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string",
+              "enum": [
+                "30d",
+                "90d",
+                "ytd",
+                "1y"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "enable_overdraft_protection",
+        "description": "Turn on overdraft protection for an account.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "account_type": {
+              "type": "string",
+              "enum": [
+                "checking",
+                "savings"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "update_payee",
+        "description": "Add or edit a saved bill payee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "payee": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "payee"
+          ]
+        }
+      },
+      {
+        "name": "request_payment_refund",
+        "description": "Request a refund for a payment that was sent.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "transaction_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "transaction_id"
+          ]
+        }
+      },
+      {
+        "name": "get_rewards_balance",
+        "description": "Check accumulated card rewards.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "program": {
+              "type": "string",
+              "enum": [
+                "cashback",
+                "points",
+                "miles"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "estimate_loan_payment",
+        "description": "Estimate the monthly payment for a loan amount and term.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number"
+            },
+            "loan_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "auto",
+                "mortgage",
+                "student",
+                "business"
+              ]
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "close_account",
+        "description": "Close one of the customer's accounts.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "account_type": {
+              "type": "string",
+              "enum": [
+                "checking",
+                "savings",
+                "credit",
+                "investment"
+              ]
+            }
+          },
+          "required": [
+            "account_type"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "support",
+    "tools": [
+      {
+        "name": "create_ticket",
+        "description": "Open a new support ticket with a priority and category.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "subject": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "urgent"
+              ]
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "billing",
+                "technical",
+                "account",
+                "shipping",
+                "feedback",
+                "bug"
+              ]
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "chat",
+                "phone",
+                "social"
+              ]
+            }
+          },
+          "required": [
+            "subject"
+          ]
+        }
+      },
+      {
+        "name": "update_ticket",
+        "description": "Update the fields of an existing support ticket.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticket_id"
+          ]
+        }
+      },
+      {
+        "name": "close_ticket",
+        "description": "Close a support ticket with a resolution outcome.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "duplicate",
+                "wont_fix",
+                "no_response",
+                "by_design"
+              ]
+            }
+          },
+          "required": [
+            "ticket_id"
+          ]
+        }
+      },
+      {
+        "name": "assign_ticket",
+        "description": "Assign a ticket to a support team or queue.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            },
+            "team": {
+              "type": "string",
+              "enum": [
+                "tier1",
+                "tier2",
+                "engineering",
+                "billing",
+                "success"
+              ]
+            }
+          },
+          "required": [
+            "ticket_id",
+            "team"
+          ]
+        }
+      },
+      {
+        "name": "escalate_ticket",
+        "description": "Escalate a ticket to a higher support tier or manager.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticket_id"
+          ]
+        }
+      },
+      {
+        "name": "search_knowledge_base",
+        "description": "Search internal help articles and documentation for an answer.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "send_reply",
+        "description": "Send a written reply to the customer on a ticket.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticket_id",
+            "body"
+          ]
+        }
+      },
+      {
+        "name": "schedule_callback",
+        "description": "Schedule a phone callback with the customer.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            },
+            "time": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticket_id"
+          ]
+        }
+      },
+      {
+        "name": "create_task",
+        "description": "Create an internal task and assign it to a teammate.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "assignee": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "urgent"
+              ]
+            }
+          },
+          "required": [
+            "title"
+          ]
+        }
+      },
+      {
+        "name": "send_message",
+        "description": "Send a message to a teammate or channel on a messaging platform.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "recipient": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string",
+              "enum": [
+                "slack",
+                "teams",
+                "email",
+                "sms"
+              ]
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "recipient",
+            "body"
+          ]
+        }
+      },
+      {
+        "name": "schedule_meeting",
+        "description": "Schedule a meeting and pick how it will be held.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "meeting_type": {
+              "type": "string",
+              "enum": [
+                "video",
+                "phone",
+                "in_person"
+              ]
+            }
+          },
+          "required": [
+            "title"
+          ]
+        }
+      },
+      {
+        "name": "share_file",
+        "description": "Share a file and set who is allowed to see it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_id": {
+              "type": "string"
+            },
+            "visibility": {
+              "type": "string",
+              "enum": [
+                "private",
+                "team",
+                "organization",
+                "public"
+              ]
+            }
+          },
+          "required": [
+            "file_id"
+          ]
+        }
+      },
+      {
+        "name": "set_status",
+        "description": "Set the user's availability status.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "busy",
+                "away",
+                "do_not_disturb",
+                "offline"
+              ]
+            }
+          },
+          "required": [
+            "status"
+          ]
+        }
+      },
+      {
+        "name": "create_reminder",
+        "description": "Set a reminder that is delivered over a chosen channel.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "push",
+                "sms"
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      {
+        "name": "tag_ticket",
+        "description": "Add labels or tags to a support ticket for organization.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ticket_id": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "ticket_id",
+            "tags"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "travel",
+    "tools": [
+      {
+        "name": "search_flights",
+        "description": "Search flights between two cities, filtered by cabin, stops, and sort order.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "type": "string",
+              "description": "departure city or airport"
+            },
+            "destination": {
+              "type": "string",
+              "description": "arrival city or airport"
+            },
+            "cabin": {
+              "type": "string",
+              "enum": [
+                "economy",
+                "premium_economy",
+                "business",
+                "first"
+              ]
+            },
+            "stops": {
+              "type": "string",
+              "enum": [
+                "nonstop",
+                "one_stop",
+                "any"
+              ]
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "price",
+                "duration",
+                "departure_time",
+                "arrival_time"
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "destination"
+          ]
+        }
+      },
+      {
+        "name": "book_flight",
+        "description": "Book a specific flight that was found in search.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "flight_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "flight_id"
+          ]
+        }
+      },
+      {
+        "name": "cancel_flight",
+        "description": "Cancel a booked flight.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "schedule_change",
+                "found_cheaper",
+                "plans_changed",
+                "medical",
+                "weather"
+              ]
+            }
+          },
+          "required": [
+            "booking_id"
+          ]
+        }
+      },
+      {
+        "name": "search_hotels",
+        "description": "Search hotels in a location, filtered by star rating and sort order.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            },
+            "star_rating": {
+              "type": "string",
+              "enum": [
+                "3",
+                "4",
+                "5"
+              ]
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "price",
+                "rating",
+                "distance"
+              ]
+            }
+          },
+          "required": [
+            "location"
+          ]
+        }
+      },
+      {
+        "name": "book_hotel",
+        "description": "Reserve a room at a specific hotel.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "hotel_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hotel_id"
+          ]
+        }
+      },
+      {
+        "name": "search_cars",
+        "description": "Search rental cars at a location, filtered by car type.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            },
+            "car_type": {
+              "type": "string",
+              "enum": [
+                "economy",
+                "compact",
+                "suv",
+                "luxury",
+                "van",
+                "convertible"
+              ]
+            }
+          },
+          "required": [
+            "location"
+          ]
+        }
+      },
+      {
+        "name": "book_car",
+        "description": "Reserve a specific rental car.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "car_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "car_id"
+          ]
+        }
+      },
+      {
+        "name": "check_in",
+        "description": "Check in for a booked flight and choose a seat preference.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "seat_preference": {
+              "type": "string",
+              "enum": [
+                "window",
+                "aisle",
+                "middle",
+                "no_preference"
+              ]
+            }
+          },
+          "required": [
+            "booking_id"
+          ]
+        }
+      },
+      {
+        "name": "add_baggage",
+        "description": "Add baggage to a flight booking.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "baggage_type": {
+              "type": "string",
+              "enum": [
+                "carry_on",
+                "checked",
+                "oversized",
+                "sports_equipment"
+              ]
+            }
+          },
+          "required": [
+            "booking_id",
+            "baggage_type"
+          ]
+        }
+      },
+      {
+        "name": "select_seat",
+        "description": "Choose a specific seat on a booked flight.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "seat": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "booking_id",
+            "seat"
+          ]
+        }
+      },
+      {
+        "name": "get_trip_status",
+        "description": "Get the current status and itinerary for a trip.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "booking_id"
+          ]
+        }
+      },
+      {
+        "name": "request_refund",
+        "description": "Request a refund for a cancelled travel booking.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "refund_method": {
+              "type": "string",
+              "enum": [
+                "original_payment",
+                "travel_credit",
+                "voucher"
+              ]
+            }
+          },
+          "required": [
+            "booking_id"
+          ]
+        }
+      },
+      {
+        "name": "set_price_alert",
+        "description": "Notify the traveler when a route's fare drops.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "route": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "push"
+              ]
+            }
+          },
+          "required": [
+            "route"
+          ]
+        }
+      },
+      {
+        "name": "get_visa_requirements",
+        "description": "Look up visa and entry requirements for a destination country.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "country": {
+              "type": "string"
+            },
+            "nationality": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "country"
+          ]
+        }
+      },
+      {
+        "name": "book_airport_transfer",
+        "description": "Book ground transport between the airport and the hotel.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string"
+            },
+            "transfer_type": {
+              "type": "string",
+              "enum": [
+                "shared_shuttle",
+                "private_car",
+                "taxi",
+                "rideshare"
+              ]
+            }
+          },
+          "required": [
+            "booking_id",
+            "transfer_type"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "healthcare",
+    "tools": [
+      {
+        "name": "book_appointment",
+        "description": "Schedule a medical appointment with a provider.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "visit_type": {
+              "type": "string",
+              "enum": [
+                "in_person",
+                "telehealth",
+                "urgent_care",
+                "follow_up"
+              ]
+            },
+            "specialty": {
+              "type": "string",
+              "enum": [
+                "primary_care",
+                "cardiology",
+                "dermatology",
+                "pediatrics",
+                "orthopedics",
+                "mental_health"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "cancel_appointment",
+        "description": "Cancel a scheduled appointment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "appointment_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "feeling_better",
+                "scheduling_conflict",
+                "found_other_provider",
+                "cost",
+                "transportation"
+              ]
+            }
+          },
+          "required": [
+            "appointment_id"
+          ]
+        }
+      },
+      {
+        "name": "reschedule_appointment",
+        "description": "Move an existing appointment to a new time.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "appointment_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "appointment_id"
+          ]
+        }
+      },
+      {
+        "name": "request_prescription_refill",
+        "description": "Request a refill for an existing prescription.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "medication": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "medication"
+          ]
+        }
+      },
+      {
+        "name": "check_prescription_status",
+        "description": "Check whether a prescription is ready at the pharmacy.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "medication": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "ready",
+                "filled",
+                "denied",
+                "expired"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_lab_results",
+        "description": "Retrieve results from completed lab tests.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "test_type": {
+              "type": "string",
+              "enum": [
+                "blood_panel",
+                "urinalysis",
+                "imaging",
+                "biopsy",
+                "covid",
+                "allergy"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "order_lab_test",
+        "description": "Order a new laboratory or diagnostic test.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "test_type": {
+              "type": "string",
+              "enum": [
+                "blood_panel",
+                "urinalysis",
+                "imaging",
+                "biopsy",
+                "covid",
+                "allergy"
+              ]
+            }
+          },
+          "required": [
+            "test_type"
+          ]
+        }
+      },
+      {
+        "name": "get_medical_records",
+        "description": "Retrieve the patient's medical record history.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "share_records_with_provider",
+        "description": "Share medical records with another provider or clinic.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        }
+      },
+      {
+        "name": "message_provider",
+        "description": "Send a secure message to the care team.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "urgency": {
+              "type": "string",
+              "enum": [
+                "routine",
+                "urgent",
+                "emergency"
+              ]
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      },
+      {
+        "name": "get_vitals_history",
+        "description": "View recorded vital-sign measurements over time.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "metric": {
+              "type": "string",
+              "enum": [
+                "blood_pressure",
+                "heart_rate",
+                "weight",
+                "glucose",
+                "temperature",
+                "oxygen"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "log_symptom",
+        "description": "Record a symptom the patient is experiencing.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "symptom": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "mild",
+                "moderate",
+                "severe"
+              ]
+            }
+          },
+          "required": [
+            "symptom"
+          ]
+        }
+      },
+      {
+        "name": "find_provider",
+        "description": "Search for a doctor or clinic by specialty.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "specialty": {
+              "type": "string",
+              "enum": [
+                "primary_care",
+                "cardiology",
+                "dermatology",
+                "pediatrics",
+                "orthopedics",
+                "mental_health"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_insurance_coverage",
+        "description": "Look up what the patient's insurance plan covers.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "submit_insurance_claim",
+        "description": "File an insurance claim for a service received.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "claim_type": {
+              "type": "string",
+              "enum": [
+                "medical",
+                "dental",
+                "vision",
+                "pharmacy"
+              ]
+            }
+          },
+          "required": [
+            "claim_type"
+          ]
+        }
+      },
+      {
+        "name": "check_claim_status",
+        "description": "Check the status of a submitted insurance claim.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "claim_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "submitted",
+                "in_review",
+                "approved",
+                "denied",
+                "paid"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "estimate_procedure_cost",
+        "description": "Estimate the out-of-pocket cost of a procedure.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "procedure": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "procedure"
+          ]
+        }
+      },
+      {
+        "name": "request_referral",
+        "description": "Request a referral to a specialist.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "specialty": {
+              "type": "string",
+              "enum": [
+                "cardiology",
+                "dermatology",
+                "orthopedics",
+                "neurology",
+                "mental_health",
+                "endocrinology"
+              ]
+            }
+          },
+          "required": [
+            "specialty"
+          ]
+        }
+      },
+      {
+        "name": "get_immunization_record",
+        "description": "Retrieve the patient's vaccination history.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "schedule_vaccination",
+        "description": "Book a vaccination appointment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "vaccine": {
+              "type": "string",
+              "enum": [
+                "flu",
+                "covid",
+                "tdap",
+                "shingles",
+                "hpv"
+              ]
+            }
+          },
+          "required": [
+            "vaccine"
+          ]
+        }
+      },
+      {
+        "name": "set_medication_reminder",
+        "description": "Set reminders to take a medication.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "medication": {
+              "type": "string"
+            },
+            "frequency": {
+              "type": "string",
+              "enum": [
+                "once_daily",
+                "twice_daily",
+                "weekly",
+                "as_needed"
+              ]
+            }
+          },
+          "required": [
+            "medication"
+          ]
+        }
+      },
+      {
+        "name": "get_care_plan",
+        "description": "View the patient's current care or treatment plan.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "request_medical_leave_note",
+        "description": "Request a doctor's note for time off work or school.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "find_pharmacy",
+        "description": "Find a pharmacy near a location.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "update_emergency_contact",
+        "description": "Update the patient's emergency contact.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "contact_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "contact_name"
+          ]
+        }
+      },
+      {
+        "name": "pay_medical_bill",
+        "description": "Pay an outstanding medical bill.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "bill_id": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "bill_id"
+          ]
+        }
+      },
+      {
+        "name": "enroll_in_program",
+        "description": "Enroll the patient in a health management program.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "program": {
+              "type": "string",
+              "enum": [
+                "diabetes",
+                "weight_management",
+                "mental_health",
+                "smoking_cessation",
+                "cardiac_rehab"
+              ]
+            }
+          },
+          "required": [
+            "program"
+          ]
+        }
+      },
+      {
+        "name": "request_second_opinion",
+        "description": "Request a second medical opinion on a diagnosis.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "specialty": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "update_pharmacy_preference",
+        "description": "Set the patient's preferred pharmacy for prescriptions.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pharmacy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pharmacy"
+          ]
+        }
+      },
+      {
+        "name": "get_appointment_reminders",
+        "description": "View or configure upcoming appointment reminders.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "push",
+                "call"
+              ]
+            }
+          },
+          "required": []
+        }
+      }
+    ]
+  },
+  {
+    "domain": "workplace",
+    "tools": [
+      {
+        "name": "submit_pto_request",
+        "description": "Request paid time off.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "leave_type": {
+              "type": "string",
+              "enum": [
+                "vacation",
+                "sick",
+                "personal",
+                "parental",
+                "bereavement",
+                "jury_duty"
+              ]
+            }
+          },
+          "required": [
+            "leave_type"
+          ]
+        }
+      },
+      {
+        "name": "approve_pto_request",
+        "description": "Approve or deny a direct report's time-off request.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "request_id"
+          ]
+        }
+      },
+      {
+        "name": "check_pto_balance",
+        "description": "Check remaining time-off balance.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "leave_type": {
+              "type": "string",
+              "enum": [
+                "vacation",
+                "sick",
+                "personal"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "submit_expense_report",
+        "description": "Submit business expenses for reimbursement.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "travel",
+                "meals",
+                "lodging",
+                "software",
+                "equipment",
+                "training"
+              ]
+            },
+            "amount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "approve_expense_report",
+        "description": "Approve a team member's expense report.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "report_id"
+          ]
+        }
+      },
+      {
+        "name": "get_payslip",
+        "description": "Retrieve a pay statement for a pay period.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "update_direct_deposit",
+        "description": "Update the bank account for payroll deposits.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "account_number": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "account_number"
+          ]
+        }
+      },
+      {
+        "name": "enroll_benefits",
+        "description": "Enroll in or change a benefits plan.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "string",
+              "enum": [
+                "health",
+                "dental",
+                "vision",
+                "401k",
+                "hsa",
+                "fsa"
+              ]
+            }
+          },
+          "required": [
+            "plan"
+          ]
+        }
+      },
+      {
+        "name": "onboard_employee",
+        "description": "Start the onboarding workflow for a new hire.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "employee_name"
+          ]
+        }
+      },
+      {
+        "name": "offboard_employee",
+        "description": "Start the offboarding workflow for a departing employee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "employee_id"
+          ]
+        }
+      },
+      {
+        "name": "provision_laptop",
+        "description": "Order and provision a work device for an employee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "device_type": {
+              "type": "string",
+              "enum": [
+                "macbook",
+                "windows_laptop",
+                "linux_workstation",
+                "tablet"
+              ]
+            }
+          },
+          "required": [
+            "device_type"
+          ]
+        }
+      },
+      {
+        "name": "reset_password",
+        "description": "Reset an employee's account password.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_id": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "grant_app_access",
+        "description": "Grant an employee access to a SaaS application.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_id": {
+              "type": "string"
+            },
+            "app": {
+              "type": "string",
+              "enum": [
+                "email",
+                "crm",
+                "vpn",
+                "design_suite",
+                "code_repo",
+                "analytics"
+              ]
+            }
+          },
+          "required": [
+            "app"
+          ]
+        }
+      },
+      {
+        "name": "revoke_app_access",
+        "description": "Revoke an employee's access to an application.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_id": {
+              "type": "string"
+            },
+            "app": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "app"
+          ]
+        }
+      },
+      {
+        "name": "request_software_license",
+        "description": "Request a paid software license.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "software": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "software"
+          ]
+        }
+      },
+      {
+        "name": "book_meeting_room",
+        "description": "Reserve a meeting room on site.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "room_type": {
+              "type": "string",
+              "enum": [
+                "huddle",
+                "conference",
+                "boardroom",
+                "phone_booth"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "reserve_desk",
+        "description": "Book a hot desk for a day at an office.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "enum": [
+                "hq",
+                "downtown",
+                "satellite",
+                "remote_hub"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "submit_it_ticket",
+        "description": "Open an IT support ticket for a technical problem.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "hardware",
+                "software",
+                "network",
+                "access",
+                "security"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "order_office_equipment",
+        "description": "Order peripherals or office equipment for an employee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "string",
+              "enum": [
+                "monitor",
+                "keyboard",
+                "headset",
+                "docking_station",
+                "chair",
+                "standing_desk"
+              ]
+            }
+          },
+          "required": [
+            "item"
+          ]
+        }
+      },
+      {
+        "name": "update_employee_profile",
+        "description": "Update an employee's HR profile details.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "employee_id": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "schedule_performance_review",
+        "description": "Schedule a performance review cycle.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "cycle": {
+              "type": "string",
+              "enum": [
+                "mid_year",
+                "annual",
+                "probation",
+                "promotion"
+              ]
+            }
+          },
+          "required": [
+            "cycle"
+          ]
+        }
+      },
+      {
+        "name": "submit_feedback",
+        "description": "Give feedback about a colleague.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "praise",
+                "constructive",
+                "upward"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "enroll_training",
+        "description": "Enroll in a learning or training course.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": [
+                "self_paced",
+                "instructor_led",
+                "webinar",
+                "certification"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "report_security_incident",
+        "description": "Report a security or phishing incident to the security team.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "severity": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            }
+          },
+          "required": [
+            "severity"
+          ]
+        }
+      },
+      {
+        "name": "request_employment_verification",
+        "description": "Request a letter verifying employment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "purpose": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "set_out_of_office",
+        "description": "Set an out-of-office auto-reply and status.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "request_business_cards",
+        "description": "Order printed business cards for an employee.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "quantity": {
+              "type": "integer"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "nominate_for_award",
+        "description": "Nominate a colleague for a recognition award.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "nominee": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "nominee"
+          ]
+        }
+      },
+      {
+        "name": "update_tax_withholding",
+        "description": "Update payroll tax withholding elections.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filing_status": {
+              "type": "string",
+              "enum": [
+                "single",
+                "married_jointly",
+                "married_separately",
+                "head_of_household"
+              ]
+            }
+          },
+          "required": []
+        }
+      }
+    ]
+  },
+  {
+    "domain": "devops",
+    "tools": [
+      {
+        "name": "deploy_service",
+        "description": "Deploy a service build to an environment using a chosen rollout strategy.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string",
+              "description": "name of the service to deploy"
+            },
+            "environment": {
+              "type": "string",
+              "enum": [
+                "dev",
+                "staging",
+                "production",
+                "canary"
+              ]
+            },
+            "strategy": {
+              "type": "string",
+              "enum": [
+                "rolling",
+                "blue_green",
+                "canary",
+                "recreate"
+              ]
+            }
+          },
+          "required": [
+            "service",
+            "environment"
+          ]
+        }
+      },
+      {
+        "name": "rollback_deployment",
+        "description": "Roll a service back to a previous known-good release.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "string",
+              "enum": [
+                "dev",
+                "staging",
+                "production",
+                "canary"
+              ]
+            }
+          },
+          "required": [
+            "service"
+          ]
+        }
+      },
+      {
+        "name": "scale_service",
+        "description": "Change the number of running replicas for a service.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string"
+            },
+            "replicas": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "service",
+            "replicas"
+          ]
+        }
+      },
+      {
+        "name": "get_service_logs",
+        "description": "Fetch recent log lines for a service, filtered by severity level.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string"
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warning",
+                "error",
+                "critical"
+              ]
+            },
+            "since": {
+              "type": "string",
+              "description": "start time, e.g. '30m' or a timestamp"
+            }
+          },
+          "required": [
+            "service"
+          ]
+        }
+      },
+      {
+        "name": "restart_pod",
+        "description": "Restart a specific Kubernetes pod.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pod_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pod_name"
+          ]
+        }
+      },
+      {
+        "name": "list_pods",
+        "description": "List Kubernetes pods, optionally filtered by their current status.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "running",
+                "pending",
+                "crashloopbackoff",
+                "terminated",
+                "all"
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "create_incident",
+        "description": "Open a new incident with a severity level so responders are notified.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "sev1",
+                "sev2",
+                "sev3",
+                "sev4"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "severity"
+          ]
+        }
+      },
+      {
+        "name": "resolve_incident",
+        "description": "Mark an active incident as resolved and close it out.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "incident_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "incident_id"
+          ]
+        }
+      },
+      {
+        "name": "page_oncall",
+        "description": "Page the on-call engineer for a specific team.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "team": {
+              "type": "string",
+              "enum": [
+                "platform",
+                "backend",
+                "frontend",
+                "data",
+                "security"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "team"
+          ]
+        }
+      },
+      {
+        "name": "run_pipeline",
+        "description": "Trigger a CI/CD pipeline run for a branch.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pipeline": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pipeline"
+          ]
+        }
+      },
+      {
+        "name": "get_metrics",
+        "description": "Query a resource utilization metric over a time window.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string"
+            },
+            "resource": {
+              "type": "string",
+              "enum": [
+                "cpu",
+                "memory",
+                "disk",
+                "network",
+                "latency"
+              ]
+            },
+            "window": {
+              "type": "string",
+              "enum": [
+                "5m",
+                "1h",
+                "24h",
+                "7d"
+              ]
+            }
+          },
+          "required": [
+            "service",
+            "resource"
+          ]
+        }
+      },
+      {
+        "name": "set_alert",
+        "description": "Create a monitoring alert that fires to a notification channel.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "metric": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "slack",
+                "pagerduty",
+                "email",
+                "webhook"
+              ]
+            }
+          },
+          "required": [
+            "metric"
+          ]
+        }
+      },
+      {
+        "name": "provision_resource",
+        "description": "Provision a new cloud resource with a specific provider.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "aws",
+                "gcp",
+                "azure"
+              ]
+            },
+            "resource_type": {
+              "type": "string",
+              "enum": [
+                "vm",
+                "database",
+                "bucket",
+                "load_balancer",
+                "cache"
+              ]
+            }
+          },
+          "required": [
+            "provider",
+            "resource_type"
+          ]
+        }
+      },
+      {
+        "name": "tear_down_resource",
+        "description": "Decommission and delete a provisioned cloud resource.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id"
+          ]
+        }
+      },
+      {
+        "name": "update_dns_record",
+        "description": "Create or update a DNS record for a domain.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "domain": {
+              "type": "string"
+            },
+            "record_type": {
+              "type": "string",
+              "enum": [
+                "a",
+                "aaaa",
+                "cname",
+                "mx",
+                "txt"
+              ]
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "domain",
+            "record_type",
+            "value"
+          ]
+        }
+      },
+      {
+        "name": "grant_access",
+        "description": "Grant a user an IAM role on a resource.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "viewer",
+                "editor",
+                "admin",
+                "owner"
+              ]
+            }
+          },
+          "required": [
+            "user",
+            "role"
+          ]
+        }
+      }
+    ]
+  }
+]
