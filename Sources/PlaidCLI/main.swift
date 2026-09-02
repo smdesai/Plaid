@@ -65,12 +65,13 @@ enum PlaidCLI {
     private static func createGenerator(
         model: CLIModel,
         tokenizer: ColbertTokenizer
-    ) throws -> ColbertEmbeddingGenerator {
+    ) async throws -> ColbertEmbeddingGenerator {
+        // The Core ML encoder is fetched from the Hugging Face Hub on first use and cached.
         switch model {
         case .lfm2:
-            return try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+            return try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         case .mxbai:
-            return try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+            return try await MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         }
     }
 
@@ -462,7 +463,7 @@ enum PlaidCLI {
 
         print("Loading tokenizer/model: \(finalModelId) (\(model.displayName))")
         let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try createGenerator(model: model, tokenizer: tokenizer)
+        let generator = try await createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
@@ -685,7 +686,7 @@ enum PlaidCLI {
         // Load ColBERT model
         print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
         let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try createGenerator(model: model, tokenizer: tokenizer)
+        let generator = try await createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
@@ -906,7 +907,7 @@ enum PlaidCLI {
         // Load ColBERT model
         print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
         let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try createGenerator(model: model, tokenizer: tokenizer)
+        let generator = try await createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,
@@ -1302,7 +1303,7 @@ enum PlaidCLI {
         // Load ColBERT model
         print("⚙️  Loading ColBERT model: \(finalModelId) (\(model.displayName))...")
         let tokenizer = try await ColbertTokenizer.from(pretrained: finalModelId)
-        let generator = try createGenerator(model: model, tokenizer: tokenizer)
+        let generator = try await createGenerator(model: model, tokenizer: tokenizer)
         let chunker = TokenSplitter(withTokenizer: tokenizer)
         let colbert = ColbertModel(
             generator: generator,

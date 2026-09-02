@@ -60,11 +60,11 @@ class SearchEngine: ObservableObject {
         let generator: ColbertEmbeddingGenerator
         switch model {
         case .lfm2:
-            print("📦 Initializing LFM2 embedding generator...")
-            generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+            print("📦 Initializing LFM2 embedding generator (downloads the Core ML model on first use)...")
+            generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         case .mxbaiEdge:
-            print("📦 Initializing MXBAI-Edge embedding generator...")
-            generator = try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+            print("📦 Initializing MXBAI-Edge embedding generator (downloads the Core ML model on first use)...")
+            generator = try await MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         }
 
         // Use SentenceBoundarySplitter for better semantic coherence in chunks

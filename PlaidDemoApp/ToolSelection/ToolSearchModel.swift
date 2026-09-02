@@ -52,11 +52,11 @@ final class ToolSearchModel: ObservableObject {
             // Tokenizer is downloaded from Hugging Face on first launch, then cached.
             let tokenizer = try await ColbertTokenizer.from(pretrained: modelId)
 
-            // Index with the 4-bit quantized LFM2 ColBERT model bundled in the Plaid package.
-            let generator = try LFM2ColbertEmbeddingGenerator(
-                tokenizer: tokenizer,
-                modelResourceName: "LFM2ColbertQuant4"
-            )
+            // The Core ML encoder is downloaded from the Hugging Face Hub on first use and
+            // cached. Plaid no longer bundles models; the 4-bit "LFM2ColbertQuant4" variant this
+            // demo used to ship is not published, so the full-precision LFM2Colbert is used.
+            // To go back to Quant4, publish it and pass `repoId:`/`modelName:` here.
+            let generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 
             let model = ColbertModel(
                 generator: generator,

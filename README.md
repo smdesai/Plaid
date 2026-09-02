@@ -35,6 +35,12 @@ Requires:
 
 ## Supported Models
 
+The Core ML encoders are **not** bundled with the package. `LFM2ColbertEmbeddingGenerator.download(tokenizer:)`
+and `MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer:)` fetch them from the Hugging Face Hub
+(`smdesai/LFM2Colbert`, `smdesai/MXBAIEdgeColbert`) on first use and cache them alongside the tokenizers;
+pass `progressHandler:` to observe the download. If you already have a compiled `.mlmodelc` (or an
+`.mlpackage`), use `init(tokenizer:modelURL:)` instead.
+
 Plaid Swift supports two ColBERT embedding models, each optimized for different use cases:
 
 ### LFM2-ColBERT (Default)
@@ -44,7 +50,7 @@ Plaid Swift supports two ColBERT embedding models, each optimized for different 
 - **Use Case**: When you need the best possible search quality
 
 ```swift
-let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+let generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 let config = ColbertModel.Configuration(embeddingDimension: 128, ...)
 ```
 
@@ -55,7 +61,7 @@ let config = ColbertModel.Configuration(embeddingDimension: 128, ...)
 - **Use Case**: When you need speed and efficiency
 
 ```swift
-let generator = try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+let generator = try await MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 let config = ColbertModel.Configuration(embeddingDimension: 64, ...)
 ```
 
@@ -217,7 +223,7 @@ import Plaid
 let tokenizer = try await ColbertTokenizer.from(
     pretrained: "LiquidAI/LFM2-ColBERT-350M"
 )
-let generator = try LFM2ColbertEmbeddingGenerator(tokenizer: tokenizer)
+let generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 let chunker = TokenSplitter(withTokenizer: tokenizer)
 
 // 2. Create ColBERT model
@@ -249,7 +255,7 @@ import Plaid
 let tokenizer = try await ColbertTokenizer.from(
     pretrained: "mixedbread-ai/mxbai-edge-colbert-v0-32m"
 )
-let generator = try MXBAIEdgeColbertEmbeddingGenerator(tokenizer: tokenizer)
+let generator = try await MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 let chunker = TokenSplitter(withTokenizer: tokenizer)
 
 // 2. Create ColBERT model

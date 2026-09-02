@@ -34,11 +34,10 @@ let package = Package(
                 .product(name: "HuggingFace", package: "swift-huggingface"),
             ],
             path: "Sources/Plaid",
-            resources: [
-                .copy("Model/LFM2Colbert.mlmodelc"),
-                .copy("Model/LFM2ColbertQuant4.mlmodelc"),
-                .copy("Model/MXBAIEdgeColbert.mlmodelc"),
-            ]
+            // Core ML encoders are downloaded from the Hugging Face Hub at runtime
+            // (see ColbertModelDownloader); any locally converted models parked under
+            // Sources/Plaid/Model are gitignored and must not be treated as sources.
+            exclude: ["Model"]
         ),
         .testTarget(
             name: "PlaidTests",

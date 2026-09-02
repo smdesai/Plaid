@@ -2,13 +2,13 @@ import CoreML
 import Foundation
 
 public enum LFM2ColbertGeneratorError: Error, LocalizedError {
-    case modelNotFound
+    case modelNotFound(URL)
     case missingOutput(String)
 
     public var errorDescription: String? {
         switch self {
-        case .modelNotFound:
-            return "Unable to locate LFM2Colbert Core ML model in the Plaid bundle."
+        case .modelNotFound(let url):
+            return "No compiled Core ML model found at \(url.path)."
         case .missingOutput(let name):
             return "Core ML output \(name) was not found in the prediction result."
         }
@@ -26,13 +26,39 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         return punctuation.map { String($0) }
     }()
 
-    public init(
+    /// Hugging Face repository that hosts the compiled `LFM2Colbert.mlmodelc`.
+    public static let defaultRepoId = "smdesai/LFM2Colbert"
+    /// Name of the compiled model directory inside `defaultRepoId` (without `.mlmodelc`).
+    public static let defaultModelName = "LFM2Colbert"
+
+    /// Downloads (or reuses the cached copy of) the Core ML encoder from the Hugging Face
+    /// Hub, then builds a generator on top of it. This is the usual entry point.
+    public static func download(
         tokenizer: ColbertTokenizer,
+        repoId: String = defaultRepoId,
+        modelName: String = defaultModelName,
+        revision: String = "main",
         configuration: MLModelConfiguration = MLModelConfiguration(),
         skiplistWords: [String]? = nil,
-        modelResourceName: String = "LFM2Colbert"
+        progressHandler: ColbertModelDownloader.ProgressHandler? = nil
+    ) async throws -> LFM2ColbertEmbeddingGenerator {
+        let modelURL = try await ColbertModelDownloader.download(
+            repoId: repoId, modelName: modelName, revision: revision,
+            progressHandler: progressHandler)
+        return try LFM2ColbertEmbeddingGenerator(
+            tokenizer: tokenizer, modelURL: modelURL, configuration: configuration,
+            skiplistWords: skiplistWords)
+    }
+
+    /// Builds a generator from an already-available compiled model (`.mlmodelc`) or a
+    /// `.mlpackage`, which is compiled on the fly.
+    public init(
+        tokenizer: ColbertTokenizer,
+        modelURL: URL,
+        configuration: MLModelConfiguration = MLModelConfiguration(),
+        skiplistWords: [String]? = nil
     ) throws {
-        let modelURL = try Self.locateModelURL(resourceName: modelResourceName)
+        let modelURL = try Self.resolveModelURL(modelURL)
         configuration.computeUnits = .cpuAndGPU
         self.model = try MLModel(contentsOf: modelURL, configuration: configuration)
         self.tokenizer = tokenizer
@@ -222,21 +248,15 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         return results
     }
 
-    private static func locateModelURL(resourceName: String = "LFM2Colbert") throws -> URL {
-        #if SWIFT_PACKAGE
-            if let compiled = Bundle.module.url(
-                forResource: resourceName, withExtension: "mlmodelc")
-            {
-                return compiled
-            }
-            if let packageURL = Bundle.module.url(
-                forResource: resourceName, withExtension: "mlpackage")
-            {
-                let compiled = try MLModel.compileModel(at: packageURL)
-                return compiled
-            }
-        #endif
-        throw LFM2ColbertGeneratorError.modelNotFound
+    private static func resolveModelURL(_ url: URL) throws -> URL {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else {
+            throw LFM2ColbertGeneratorError.modelNotFound(url)
+        }
+        if url.pathExtension == "mlpackage" {
+            return try MLModel.compileModel(at: url)
+        }
+        return url
     }
 
     public func tokenizeToIds(text: String) -> [Int] {
