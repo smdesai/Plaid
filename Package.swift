@@ -18,8 +18,10 @@ let package = Package(
         ),
     ],
     dependencies: [
-        //.package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.31.3"),
-        .package(path: "/Users/sachin/Tools/MLX/experimental-batch/mlx-swift"),
+        // Consumers that need the local experimental mlx-swift override this with a
+        // root-level path dependency; a tagged Plaid must not depend on a path itself
+        // (SwiftPM: stable-version packages cannot depend on unstable-version packages).
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.31.3"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", from: "0.8.1"),
     ],
