@@ -42,11 +42,17 @@ public enum ColbertModelDownloader {
         guard let repo = Repo.ID(rawValue: repoId) else {
             throw ColbertModelDownloadError.invalidRepositoryId(repoId)
         }
-        // The model repos contain only the .mlmodelc directory (plus .gitattributes), so an
-        // unfiltered snapshot is the simplest way to get every nested weight file.
+        // Files only. `HubClient.downloadSnapshot` lists the tree recursively and
+        // filters the entries by glob alone — it never checks `entry.type`, so the
+        // directory entries of a compiled Core ML bundle (`X.mlmodelc`, `X.mlmodelc/weights`,
+        // `X.mlmodelc/analytics`) are requested as files and the Hub answers
+        // "404 Entry not found" for the first one. An unfiltered snapshot therefore
+        // never succeeds for these repos. `snapshotGlobs(modelName:)` selects the
+        // files inside the bundle and nothing else; see its doc for why it is safe.
         let snapshot = try await HubClient.default.downloadSnapshot(
             of: repo,
             revision: revision,
+            matching: snapshotGlobs(modelName: modelName),
             progressHandler: progressHandler
         )
         let modelURL = snapshot.appendingPathComponent("\(modelName).mlmodelc", isDirectory: true)
@@ -55,5 +61,18 @@ public enum ColbertModelDownloader {
             throw ColbertModelDownloadError.modelNotFound(repoId: repoId, modelName: modelName)
         }
         return modelURL
+    }
+
+    /// The glob that selects every file inside `<modelName>.mlmodelc` and no
+    /// directory entry.
+    ///
+    /// `HubClient` matches with `fnmatch(_, _, 0)`, where `*` also matches `/`, so
+    /// `<name>.mlmodelc/*.*` reaches nested files at any depth. It excludes the
+    /// tree's directory entries because a directory inside a compiled bundle never
+    /// has a dot in its name (`weights`, `analytics`), while every file in one does
+    /// (`coremldata.bin`, `model.mil`, `metadata.json`, `weights/weight.bin`). The
+    /// bundle directory itself does not match either — it lacks the trailing `/`.
+    public static func snapshotGlobs(modelName: String) -> [String] {
+        ["\(modelName).mlmodelc/*.*"]
     }
 }
