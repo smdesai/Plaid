@@ -13,6 +13,8 @@ struct SearchView: View {
     @State private var selectedResult: SearchResult?
     @State private var showSettings = false
     @State private var showDirectoryPicker = false
+    @AppStorage(SearchEngine.resultCountKey) private var resultCount: Int =
+        SearchEngine.defaultResultCount
 
     /// Whether search is enabled (has indexed data)
     private var isSearchEnabled: Bool {
@@ -396,7 +398,7 @@ struct SearchView: View {
 
         Task {
             do {
-                let results = try await searchEngine.search(query: searchText, topK: 3)
+                let results = try await searchEngine.search(query: searchText, topK: resultCount)
                 await MainActor.run {
                     searchResults = results
                     isSearching = false

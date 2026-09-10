@@ -48,6 +48,21 @@ class SearchEngine: ObservableObject {
         return stored > 0 ? stored : defaultEncodeBatchSize
     }
 
+    /// UserDefaults key for how many search results (top-k) to return.
+    nonisolated static let resultCountKey = "searchResultCount"
+    /// Result count used when the user hasn't chosen one.
+    nonisolated static let defaultResultCount = 3
+    /// Result counts offered in Settings.
+    nonisolated static let resultCountOptions = [3, 5, 10, 20]
+
+    /// The number of search results currently selected in Settings, or the
+    /// default. Read fresh from `UserDefaults` so a change applies to the next
+    /// search immediately.
+    nonisolated static var resultCount: Int {
+        let stored = UserDefaults.standard.integer(forKey: resultCountKey)
+        return stored > 0 ? stored : defaultResultCount
+    }
+
     init(backend: SearchBackend = RustSearchBackend()) {
         self.backend = backend
 

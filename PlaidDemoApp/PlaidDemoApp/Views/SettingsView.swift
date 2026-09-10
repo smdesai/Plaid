@@ -9,6 +9,8 @@ struct SettingsView: View {
     @State private var isDeleting = false
     @AppStorage(SearchEngine.encodeBatchSizeKey) private var encodeBatchSize: Int =
         SearchEngine.defaultEncodeBatchSize
+    @AppStorage(SearchEngine.resultCountKey) private var resultCount: Int =
+        SearchEngine.defaultResultCount
 
     init(searchEngine: SearchEngine) {
         self.searchEngine = searchEngine
@@ -128,6 +130,40 @@ struct SettingsView: View {
 
                             Text(
                                 "Chunks encoded per Core ML call. Higher can improve ANE/GPU utilization but raises peak memory. Applies on the next index."
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(12)
+                    }
+
+                    // Search Section (result count)
+                    VStack(alignment: .leading, spacing: 16) {
+                        sectionHeader(title: "Search", icon: "magnifyingglass")
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "list.number")
+                                    .font(.body)
+                                    .foregroundColor(.teal)
+                                    .frame(width: 28)
+
+                                Text("Results per search")
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+
+                            Picker("Results per search", selection: $resultCount) {
+                                ForEach(SearchEngine.resultCountOptions, id: \.self) { count in
+                                    Text("\(count)").tag(count)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(
+                                "How many top matches to show. Applies to the next search."
                             )
                             .font(.caption)
                             .foregroundColor(.secondary)
