@@ -19,6 +19,10 @@ settings:
     ENABLE_PREVIEWS: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     GENERATE_INFOPLIST_FILE: YES
+    # NextPlaidFFI.xcframework is Apple Silicon only; drop the Intel simulator
+    # slice so plain (multi-arch) simulator/archive builds don't try to link a
+    # missing x86_64 slice. Runs on Apple Silicon Macs; the sim is arm64 there.
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     TARGETED_DEVICE_FAMILY: "1,2"
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     LD_RUNPATH_SEARCH_PATHS:
