@@ -108,11 +108,9 @@ public final class RustSearchBackend: SearchBackend, @unchecked Sendable {
         embeddingDim: Int,
         nbits: Int,
         embeddings: [[[Float]]],
-        centroids: [[Float]],
         batchSize: Int,
         seed: UInt64?
     ) throws {
-        // `centroids` is ignored: the Rust engine computes its own k-means.
         guard !embeddings.isEmpty else { throw PlaidError.emptyEmbeddingSet }
         let matrices = packMatrices(embeddings)
         let config = FfiIndexConfig(

@@ -18,10 +18,6 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // Consumers that need the local experimental mlx-swift override this with a
-        // root-level path dependency; a tagged Plaid must not depend on a path itself
-        // (SwiftPM: stable-version packages cannot depend on unstable-version packages).
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.31.3"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", from: "0.8.1"),
     ],
@@ -47,7 +43,6 @@ let package = Package(
         .target(
             name: "Plaid",
             dependencies: [
-                .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "HuggingFace", package: "swift-huggingface"),
                 "NextPlaidBindings",

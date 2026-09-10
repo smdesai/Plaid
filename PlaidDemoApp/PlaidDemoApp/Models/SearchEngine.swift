@@ -341,16 +341,12 @@ class SearchEngine: ObservableObject {
                         if !didCreate {
                             print(
                                 "💾 Creating Plaid index (first batch of \(batch.count) chunks)...")
-                            // The Rust engine computes its own k-means and ignores
-                            // `centroids`; the legacy engine consumes them.
-                            let centroids = try generateCentroids(
-                                from: embeddings, nbits: nbits, embeddingDim: embeddingDim)
+                            // The Rust engine computes its own k-means centroids.
                             try backend.create(
                                 indexURL: indexURL,
                                 embeddingDim: embeddingDim,
                                 nbits: nbits,
                                 embeddings: embeddings,
-                                centroids: centroids,
                                 batchSize: 64,
                                 seed: 42
                             )
@@ -543,52 +539,6 @@ class SearchEngine: ObservableObject {
         let nFullScores = max(topK * 80, 300)
         let nIvfProbe = min(48, max(32, totalChunks / 100))
         return (nFullScores, nIvfProbe)
-    }
-
-    /// Generate centroids from embeddings using uniform sampling.
-    ///
-    /// `nonisolated static` so the background indexing pipeline can call it
-    /// off the main actor. Only the legacy engine uses these; the Rust engine
-    /// computes its own k-means and ignores them.
-    nonisolated static func generateCentroids(
-        from embeddings: [[[Float]]], nbits: Int, embeddingDim: Int
-    ) throws -> [[Float]] {
-        let numCentroids = 1 << nbits  // 4 centroids for nbits=2
-
-        var allVectors: [[Float]] = []
-        for docEmbedding in embeddings {
-            allVectors.append(contentsOf: docEmbedding)
-        }
-
-        guard !allVectors.isEmpty else {
-            throw SearchEngineError.noEmbeddings
-        }
-
-        var centroids: [[Float]] = []
-        if allVectors.count <= numCentroids {
-            centroids = allVectors
-            // Pad with random vectors if needed
-            while centroids.count < numCentroids {
-                let randomVector = (0 ..< embeddingDim).map { _ in Float.random(in: -1 ... 1) }
-                centroids.append(normalize(randomVector))
-            }
-        } else {
-            // Sample uniformly
-            let stride = allVectors.count / numCentroids
-            for i in 0 ..< numCentroids {
-                let index = min(i * stride, allVectors.count - 1)
-                centroids.append(allVectors[index])
-            }
-        }
-
-        return centroids
-    }
-
-    /// Normalize a vector to unit length
-    nonisolated static func normalize(_ vector: [Float]) -> [Float] {
-        let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
-        guard norm > 0 else { return vector }
-        return vector.map { $0 / norm }
     }
 
     /// Save index state to disk

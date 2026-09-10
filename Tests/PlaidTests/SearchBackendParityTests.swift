@@ -3,47 +3,16 @@ import XCTest
 
 @testable import Plaid
 
-/// M4 parity for `RustSearchBackend`, two complementary checks:
+/// Correctness oracle for `RustSearchBackend`: the engine's approximate
+/// late-interaction ranking is checked against an **exact brute-force MaxSim CPU
+/// reference** (the ground-truth ColBERT score the engine approximates). Fully
+/// in-process and environment-independent.
 ///
-///  1. `testRustMatchesExactMaxSimRanking` — Rust vs an **exact brute-force
-///     MaxSim CPU reference** (the ground-truth late-interaction score both
-///     engines approximate). Environment-independent.
-///  2. `testLegacyAndRustAgreeOnRanking` — the plan's original oracle: identical
-///     raw embeddings through the legacy MLX `Plaid` engine vs `RustSearchBackend`.
-///
-/// The legacy engine scores on the GPU via MLX, whose Metal shader library is not
-/// bundled into the SwiftPM test build, so `setUp` colocates `default.metallib`
-/// (tracked at the repo root) next to the test binary — the only path MLX's
-/// `load_colocated_library` searches — before any MLX op runs.
-///
-/// Quantization is lossy, so every assertion compares *ranking* (recall@1 and
-/// top-k overlap), never raw scores.
+/// Quantization is lossy, so assertions compare *ranking* (top-1 and top-k
+/// overlap), never raw scores.
 final class SearchBackendParityTests: XCTestCase {
     private let dim = 64
     private let nbits = 4  // 16 centroids: fine enough that ranking is clean.
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        ensureMLXMetallib()
-    }
-
-    /// MLX searches for `mlx.metallib` colocated with the running binary. The
-    /// SwiftPM build never bundles MLX's shaders, so copy the repo-root
-    /// `default.metallib` (MLX's own library) into place. Idempotent.
-    private func ensureMLXMetallib() {
-        let fm = FileManager.default
-        guard let exe = Bundle(for: Self.self).executableURL else { return }
-        let dest = exe.deletingLastPathComponent().appendingPathComponent("mlx.metallib")
-        if fm.fileExists(atPath: dest.path) { return }
-        // #filePath is <repo>/Tests/PlaidTests/SearchBackendParityTests.swift.
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let src = repoRoot.appendingPathComponent("default.metallib")
-        guard fm.fileExists(atPath: src.path) else { return }
-        try? fm.copyItem(at: src, to: dest)
-    }
 
     // Deterministic RNG (splitmix64) so the corpus/queries are reproducible.
     private struct SeededRNG: RandomNumberGenerator {
@@ -80,8 +49,8 @@ final class SearchBackendParityTests: XCTestCase {
     /// `normalize(α·T + √(1-α²)·U)` for α = 1.0, 0.82, 0.64, 0.46, 0.28 (U a
     /// per-doc distractor orthogonalized against T). A single-token query near
     /// topic T then scores that topic's five docs at ≈α (descending, clearly
-    /// separated) and every other doc at ≈0 — an unambiguous top-5 both engines
-    /// should recover. Returns raw vectors; each backend normalizes as needed.
+    /// separated) and every other doc at ≈0 — an unambiguous top-5 the engine
+    /// should recover. Returns raw vectors; the backend normalizes as needed.
     private func makeCorpus() -> (docs: [[[Float]]], queries: [[[Float]]], targets: [Int]) {
         var rng = SeededRNG(seed: 42)
         let nTopics = 6
@@ -114,24 +83,6 @@ final class SearchBackendParityTests: XCTestCase {
             [topics[topic].map { $0 + Float.random(in: -0.02 ... 0.02, using: &rng) }]
         }
         return (docs, queries, targets)
-    }
-
-    /// Replicates `SearchEngine.generateCentroids`: 1<<nbits centroids, uniform
-    /// stride-sampled from the flattened raw token vectors (the legacy engine
-    /// requires caller-supplied centroids; the Rust engine computes its own).
-    private func legacyCentroids(from embeddings: [[[Float]]]) -> [[Float]] {
-        let numCentroids = 1 << nbits
-        var all: [[Float]] = []
-        for doc in embeddings { all.append(contentsOf: doc) }
-        if all.count <= numCentroids {
-            var c = all
-            while c.count < numCentroids {
-                c.append(normalize((0 ..< dim).map { _ in Float.random(in: -1 ... 1) }))
-            }
-            return c
-        }
-        let stride = all.count / numCentroids
-        return (0 ..< numCentroids).map { all[min($0 * stride, all.count - 1)] }
     }
 
     /// Exact ColBERT MaxSim over unit-normalized tokens: Σ_q max_d (q · d).
@@ -187,7 +138,7 @@ final class SearchBackendParityTests: XCTestCase {
         let rust = RustSearchBackend()
         try rust.create(
             indexURL: dir, embeddingDim: dim, nbits: nbits,
-            embeddings: docs, centroids: [], batchSize: 50_000, seed: 42)
+            embeddings: docs, batchSize: 50_000, seed: 42)
 
         let rustRes = try rust.loadAndSearch(
             indexURL: dir, queries: queries, searchParameters: params(topK: 5),
@@ -207,54 +158,5 @@ final class SearchBackendParityTests: XCTestCase {
         let avgOverlap = overlapSum / Double(targets.count)
         XCTAssertGreaterThanOrEqual(
             avgOverlap, 0.6, "avg top-5 overlap vs exact too low: \(avgOverlap)")
-    }
-
-    // MARK: - Legacy (MLX) vs Rust
-
-    func testLegacyAndRustAgreeOnRanking() throws {
-        let (docs, queries, targets) = makeCorpus()
-
-        let legacyDir = tempDir("legacy")
-        let rustDir = tempDir("rust")
-        defer {
-            try? FileManager.default.removeItem(at: legacyDir)
-            try? FileManager.default.removeItem(at: rustDir)
-        }
-
-        let legacy = LegacySearchBackend()
-        try legacy.create(
-            indexURL: legacyDir, embeddingDim: dim, nbits: nbits,
-            embeddings: docs, centroids: legacyCentroids(from: docs),
-            batchSize: 50_000, seed: 42)
-
-        let rust = RustSearchBackend()
-        try rust.create(
-            indexURL: rustDir, embeddingDim: dim, nbits: nbits,
-            embeddings: docs, centroids: [], batchSize: 50_000, seed: 42)
-
-        let legacyRes = try legacy.loadAndSearch(
-            indexURL: legacyDir, queries: queries, searchParameters: params(topK: 5),
-            showProgress: false, preloadIndex: false, subset: nil)
-        let rustRes = try rust.loadAndSearch(
-            indexURL: rustDir, queries: queries, searchParameters: params(topK: 5),
-            showProgress: false, preloadIndex: false, subset: nil)
-
-        XCTAssertEqual(legacyRes.count, targets.count)
-        XCTAssertEqual(rustRes.count, targets.count)
-
-        var overlapSum = 0.0
-        for (q, target) in targets.enumerated() {
-            let lIds = legacyRes[q].passageIds
-            let rIds = rustRes[q].passageIds
-            // Both engines recover the intended nearest doc as top-1...
-            XCTAssertEqual(lIds.first, target, "legacy top-1 wrong for query \(q)")
-            XCTAssertEqual(rIds.first, target, "rust top-1 wrong for query \(q)")
-            // ...and their top-5 rankings largely agree.
-            overlapSum += overlapAtK(lIds, rIds, k: 5)
-        }
-
-        let avgOverlap = overlapSum / Double(targets.count)
-        XCTAssertGreaterThanOrEqual(
-            avgOverlap, 0.6, "avg legacy/rust top-5 overlap too low: \(avgOverlap)")
     }
 }

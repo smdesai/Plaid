@@ -23,15 +23,13 @@ public struct DeleteOutcome: Sendable {
 /// `Sendable` so callers can drive create/update from a background task while
 /// keeping their UI actor free.
 public protocol SearchBackend: Sendable {
-    /// Build a fresh index at `indexURL` from `embeddings`.
-    /// `centroids` are only used by the legacy engine; the Rust engine computes
-    /// its own and ignores the argument.
+    /// Build a fresh index at `indexURL` from `embeddings`. The engine computes
+    /// its own quantization centroids via k-means.
     func create(
         indexURL: URL,
         embeddingDim: Int,
         nbits: Int,
         embeddings: [[[Float]]],
-        centroids: [[Float]],
         batchSize: Int,
         seed: UInt64?
     ) throws

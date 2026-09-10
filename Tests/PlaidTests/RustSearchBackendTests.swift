@@ -37,7 +37,6 @@ final class RustSearchBackendTests: XCTestCase {
             embeddingDim: dim,
             nbits: 2,
             embeddings: [oneHot(axis: 0), oneHot(axis: 1), oneHot(axis: 2)],
-            centroids: [],
             batchSize: 50_000,
             seed: 42
         )

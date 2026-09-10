@@ -17,18 +17,11 @@ enum PlaidCLI {
 
     // MARK: - Backend Selection
 
-    /// The vector-engine backend behind every index operation. Defaults to the
-    /// Rust `next-plaid` engine; set `PLAID_BACKEND=legacy` to use the pure-Swift
-    /// MLX engine (the parity oracle). Both conform to `SearchBackend`, so the
-    /// commands below are engine-agnostic.
+    /// The vector-engine backend behind every index operation: the Rust
+    /// `next-plaid` engine. Conforms to `SearchBackend`, so the commands below
+    /// are engine-agnostic.
     private static func makeBackend() -> SearchBackend {
-        switch ProcessInfo.processInfo.environment["PLAID_BACKEND"]?.lowercased() {
-        case "legacy", "swift", "mlx":
-            print("🐢 Backend: legacy pure-Swift Plaid engine (PLAID_BACKEND=legacy)")
-            return LegacySearchBackend()
-        default:
-            return RustSearchBackend()
-        }
+        RustSearchBackend()
     }
 
     // MARK: - Model Selection
@@ -100,12 +93,8 @@ enum PlaidCLI {
         let commandArgs = Array(args.dropFirst())
 
         switch command.lowercased() {
-        case "quickstart":
-            try runQuickStart()
         case "update":
             try await runUserUpdate(arguments: commandArgs)
-        case "update-test":
-            try runUpdateTest()
         case "remap-test":
             try runRemapTest()
         case "delete":
@@ -148,11 +137,9 @@ enum PlaidCLI {
                              delete -i ~/.plaid/my_index -d 5 12 23 45
                              delete -i ~/.plaid/my_index -f to_delete.txt
 
-              quickstart   Create an index, execute a search, and print the top results (test data).
-
-              remap-test   Offline end-to-end check of the active backend (no model download):
+              remap-test   Offline end-to-end check of the backend (no model download):
                            create → search → update → middle-delete → suffix-delete, asserting the
-                           delete-renumber remap. Set PLAID_BACKEND=legacy to run it on the Swift engine.
+                           delete-renumber remap.
 
               tokenize     Tokenize a string using a pretrained tokenizer and print tokens/ids.
                            Usage: tokenize [--query|--doc] [--model MODEL | --pretrained MODEL_ID] TEXT
@@ -170,202 +157,14 @@ enum PlaidCLI {
             """)
     }
 
-    private static func runQuickStart() throws {
-        let documents = try loadFloatTensor3(named: "documents.json")
-        let queries = try loadFloatTensor3(named: "queries.json")
-        let centroids = try loadFloatTensor2(named: "centroids.json")
-        let config: FixtureConfig? = try? loadFixture(named: "config.json")
-
-        guard
-            let embeddingDim = centroids.first?.count,
-            embeddingDim > 0,
-            let centroidCount = centroids.first.map({ _ in centroids.count }),
-            centroidCount > 0
-        else {
-            throw NSError(
-                domain: "PlaidCLI", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Centroid fixture is empty."])
-        }
-
-        if let expectedDim = config?.embedding_dim, expectedDim != embeddingDim {
-            throw NSError(
-                domain: "PlaidCLI",
-                code: 3,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Fixture embedding_dim mismatch (expected \(expectedDim), got \(embeddingDim))."
-                ]
-            )
-        }
-
-        let nbits = config?.nbits ?? Int(round(log2(Double(centroidCount))))
-        guard 1 << nbits == centroidCount else {
-            throw NSError(
-                domain: "PlaidCLI", code: 2,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Centroid count \(centroidCount) does not match nbits=\(nbits)."
-                ])
-        }
-
-        let topK = config?.top_k ?? (try? loadFixtureResults().first?.passage_ids.count) ?? 10
-
-        print(
-            "Loaded fixtures -> documents: \(documents.count) docs × \(documents.first?.count ?? 0) tokens × \(documents.first?.first?.count ?? 0) dim"
-        )
-        print(
-            "Queries: \(queries.count) × \(queries.first?.count ?? 0) × \(queries.first?.first?.count ?? 0)"
-        )
-        print("Centroids: \(centroids.count) × \(centroids.first?.count ?? 0); nbits=\(nbits)")
-        if let suspicious = documents.first(where: { !$0.allSatisfy { $0.count == embeddingDim } })
-        {
-            print(
-                "⚠️  Found document with inconsistent dimension: tokens=\(suspicious.count), dims=\(suspicious.map { $0.count })"
-            )
-        }
-        if let firstDoc = documents.first?.first {
-            print("First token sample: \(firstDoc.prefix(8))")
-        }
-
-        let params = SearchParameters(
-            batchSize: max(queries.count, 1),
-            nFullScores: 1024,
-            topK: topK,
-            nIvfProbe: 8,
-            logTiming: true
-        )
-
-        let indexURL = fixturesDirectory.appendingPathComponent("python_index", isDirectory: true)
-        guard
-            FileManager.default.fileExists(
-                atPath: indexURL.appendingPathComponent("metadata.json").path),
-            FileManager.default.fileExists(
-                atPath: indexURL.appendingPathComponent("plaid_index.json").path)
-        else {
-            throw NSError(
-                domain: "PlaidCLI",
-                code: 4,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Expected fixtures/python_index. Run python_parity_test.py first."
-                ]
-            )
-        }
-
-        let results = try Plaid.loadAndSearch(
-            indexURL: indexURL,
-            queries: queries,
-            searchParameters: params,
-            showProgress: false,
-            preloadIndex: false
-        )
-
-        print("Quick Start Results (top \(topK)):\n")
-        printResults(results)
-
-        if let expected = try? loadFixtureResults() {
-            compareResults(swiftResults: results, pythonResults: expected, tolerance: 1e-2)
-        } else {
-            print("No python_results.json fixture found; skipping parity comparison.\n")
-        }
-    }
-
-    private static func runUpdateTest() throws {
-        let embeddingDim = 128
-        let nbits = 4
-        let documentCount = 100
-        let tokensPerDocument = 300
-        let updateCount = 50
-        let queriesCount = 2
-        let tokensPerQuery = 50
-        let topK = 10
-
-        var rng = SeededGenerator(seed: 1337)
-        let indexURL = defaultIndexURL(named: "update")
-        try resetIndexDirectory(at: indexURL)
-
-        let initialDocs = generateDocuments(
-            count: documentCount,
-            tokens: tokensPerDocument,
-            dim: embeddingDim,
-            using: &rng
-        )
-
-        let centroids = generateCentroids(
-            count: max(1 << nbits, 64),
-            dim: embeddingDim,
-            using: &rng
-        )
-
-        try Plaid.create(
-            indexURL: indexURL,
-            embeddingDim: embeddingDim,
-            nbits: nbits,
-            embeddings: initialDocs,
-            centroids: centroids,
-            batchSize: 64
-        )
-
-        let queries = generateDocuments(
-            count: queriesCount,
-            tokens: tokensPerQuery,
-            dim: embeddingDim,
-            using: &rng
-        )
-
-        let params = SearchParameters(
-            batchSize: 32,
-            nFullScores: 32,
-            topK: topK,
-            nIvfProbe: 1
-        )
-
-        let beforeUpdate = try Plaid.loadAndSearch(
-            indexURL: indexURL,
-            queries: queries,
-            searchParameters: params,
-            showProgress: false,
-            preloadIndex: false
-        )
-
-        let newDocs = generateDocuments(
-            count: updateCount,
-            tokens: tokensPerDocument,
-            dim: embeddingDim,
-            using: &rng
-        )
-
-        try Plaid.update(
-            indexURL: indexURL,
-            embeddings: newDocs,
-            batchSize: 64
-        )
-
-        let afterUpdate = try Plaid.loadAndSearch(
-            indexURL: indexURL,
-            queries: queries,
-            searchParameters: params,
-            showProgress: false,
-            preloadIndex: false
-        )
-
-        print("Update Example (top \(topK)):\n")
-        print("Results before update:\n")
-        printResults(beforeUpdate)
-
-        print("\nResults after update (additional \(updateCount) docs):\n")
-        printResults(afterUpdate)
-    }
-
     /// Offline end-to-end exercise of the active `SearchBackend`: create, search,
     /// append, then a middle delete and a suffix delete — asserting the engine's
     /// delete-renumber remap. Uses one-hot vectors so a query along an axis maps
     /// to a known document id; needs no model download or network.
     private static func runRemapTest() throws {
         let dim = 16
-        // nbits must divide 8 (Rust). nbits=4 → 16 one-hot centroids, one per dim,
-        // so the legacy engine quantizes every doc axis (0…6) losslessly (the Rust
-        // engine computes its own k-means and ignores the supplied centroids).
+        // nbits must divide 8 (Rust). nbits=4 → the engine builds 16 quantization
+        // buckets via its own k-means; one-hot docs quantize losslessly.
         let nbits = 4
 
         func oneHot(_ axis: Int, tokens: Int = 4) -> [[Float]] {
@@ -406,15 +205,9 @@ enum PlaidCLI {
 
         // 1. Create five docs along axes 0…4 (id == axis).
         let docs = (0 ..< 5).map { oneHot($0) }
-        // Legacy engine needs centroids; the Rust engine ignores them.
-        let centroids = (0 ..< (1 << nbits)).map { axis -> [Float] in
-            var row = [Float](repeating: 0, count: dim)
-            row[axis] = 1
-            return row
-        }
         try backend.create(
             indexURL: indexURL, embeddingDim: dim, nbits: nbits,
-            embeddings: docs, centroids: centroids, batchSize: 64, seed: 42)
+            embeddings: docs, batchSize: 64, seed: 42)
         print("① Created 5 docs along axes 0…4:")
         for axis in 0 ..< 5 { expect(try topId(axis: axis), axis, "axis \(axis)") }
 
@@ -848,15 +641,6 @@ enum PlaidCLI {
         }
         print("✅ All documents encoded\n")
 
-        // Generate centroids from document embeddings
-        print("🎯 Generating centroids for quantization...")
-        let centroids = try generateCentroidsFromDocuments(
-            documentEmbeddings: documentEmbeddings,
-            nbits: nbits,
-            embeddingDim: model.embeddingDimension
-        )
-        print("✅ Generated \(centroids.count) centroids\n")
-
         // Create index
         let indexSuffix = indexName ?? "demo_\(UUID().uuidString)"
         let indexURL = defaultIndexURL(named: indexSuffix)
@@ -867,7 +651,6 @@ enum PlaidCLI {
         print("  Model: \(model.displayName)")
         print("  Embedding dimension: \(model.embeddingDimension)")
         print("  nbits: \(nbits)")
-        print("  Centroids: \(centroids.count)")
 
         let backend = makeBackend()
         try backend.create(
@@ -875,7 +658,6 @@ enum PlaidCLI {
             embeddingDim: model.embeddingDimension,
             nbits: nbits,
             embeddings: documentEmbeddings,
-            centroids: centroids,
             batchSize: 64,
             seed: 42
         )
@@ -894,7 +676,7 @@ enum PlaidCLI {
             batchSize: 1,
             nFullScores: finalDocumentTexts.count,
             topK: min(topK, finalDocumentTexts.count),
-            nIvfProbe: min(8, centroids.count),
+            nIvfProbe: min(8, 1 << nbits),
             logTiming: true
         )
 
@@ -937,54 +719,6 @@ enum PlaidCLI {
             try? FileManager.default.removeItem(at: indexURL)
         }
         print("✅ Done!\n")
-    }
-
-    /// Generates centroids by clustering document embeddings
-    private static func generateCentroidsFromDocuments(
-        documentEmbeddings: [[[Float]]],
-        nbits: Int,
-        embeddingDim: Int
-    ) throws -> [[Float]] {
-        let numCentroids = 1 << nbits
-
-        // Collect all embedding vectors from all documents
-        var allVectors: [[Float]] = []
-        for docEmbedding in documentEmbeddings {
-            allVectors.append(contentsOf: docEmbedding)
-        }
-
-        guard !allVectors.isEmpty else {
-            throw NSError(
-                domain: "PlaidCLI",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "No vectors found in documents"]
-            )
-        }
-
-        // Simple centroid initialization: sample vectors uniformly or use k-means++
-        // For simplicity, we'll sample uniformly from the available vectors
-        var centroids: [[Float]] = []
-
-        if allVectors.count <= numCentroids {
-            // If we have fewer vectors than centroids, use all vectors and pad with random vectors
-            centroids = allVectors
-            var rng = SeededGenerator(seed: 42)
-            while centroids.count < numCentroids {
-                let randomVector = (0 ..< embeddingDim).map { _ in
-                    Float.random(in: -1.0 ... 1.0, using: &rng)
-                }
-                centroids.append(normalizeVector(randomVector))
-            }
-        } else {
-            // Sample uniformly from available vectors
-            let stride = allVectors.count / numCentroids
-            for i in 0 ..< numCentroids {
-                let index = min(i * stride, allVectors.count - 1)
-                centroids.append(allVectors[index])
-            }
-        }
-
-        return centroids
     }
 
     /// Runs demo command with an existing index (query-only mode)
@@ -1146,52 +880,6 @@ enum PlaidCLI {
         }
     }
 
-    /// Normalizes a vector to unit length
-    private static func normalizeVector(_ vector: [Float]) -> [Float] {
-        let norm = sqrt(vector.reduce(Float(0)) { $0 + $1 * $1 })
-        if norm == 0 || norm.isNaN {
-            return vector
-        }
-        return vector.map { $0 / norm }
-    }
-
-    private static func printResults(_ results: [QueryResult]) {
-        for result in results {
-            print("Query \(result.queryId):")
-            if result.passageIds.isEmpty {
-                print("  (no matches)")
-                continue
-            }
-            for (docId, score) in zip(result.passageIds, result.scores) {
-                print(String(format: "  • doc %3d  score %.4f", docId, score))
-            }
-            print("")
-        }
-    }
-
-    private static func generateDocuments(
-        count: Int,
-        tokens: Int,
-        dim: Int,
-        using rng: inout some RandomNumberGenerator
-    ) -> [[[Float]]] {
-        (0 ..< count).map { _ in
-            (0 ..< tokens).map { _ in
-                (0 ..< dim).map { _ in Float.random(in: -1.0 ... 1.0, using: &rng) }
-            }
-        }
-    }
-
-    private static func generateCentroids(
-        count: Int,
-        dim: Int,
-        using rng: inout some RandomNumberGenerator
-    ) -> [[Float]] {
-        (0 ..< count).map { _ in
-            (0 ..< dim).map { _ in Float.random(in: -1.0 ... 1.0, using: &rng) }
-        }
-    }
-
     private static func defaultIndexURL(named suffix: String) -> URL {
         let base =
             (ProcessInfo.processInfo.environment["PLAID_CLI_INDEX_DIR"]
@@ -1211,111 +899,6 @@ enum PlaidCLI {
             try? FileManager.default.removeItem(at: url)
         }
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    }
-
-    private static func loadFixture<T: Decodable>(named name: String) throws -> T {
-        let path = fixturesDirectory.appendingPathComponent(name)
-        let data = try Data(contentsOf: path)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
-
-    private static func loadFloatTensor3(named name: String) throws -> [[[Float]]] {
-        let path = fixturesDirectory.appendingPathComponent(name)
-        let data = try Data(contentsOf: path)
-        return try JSONDecoder().decode([[[Float]]].self, from: data)
-    }
-
-    private static func loadFloatTensor2(named name: String) throws -> [[Float]] {
-        let path = fixturesDirectory.appendingPathComponent(name)
-        let data = try Data(contentsOf: path)
-        return try JSONDecoder().decode([[Float]].self, from: data)
-    }
-
-    private static func loadFixtureResults() throws -> [FixtureResult] {
-        try loadFixture(named: "python_results.json")
-    }
-
-    private static func compareResults(
-        swiftResults: [QueryResult],
-        pythonResults: [FixtureResult],
-        tolerance: Float
-    ) {
-        let expectedById = Dictionary(uniqueKeysWithValues: pythonResults.map { ($0.query_id, $0) })
-        var mismatches = 0
-
-        for result in swiftResults {
-            guard let expected = expectedById[result.queryId] else {
-                print("⚠️  No python baseline for query \(result.queryId)")
-                mismatches += 1
-                continue
-            }
-
-            let swiftPairs = zip(result.passageIds, result.scores)
-            let expectedPairs = zip(expected.passage_ids, expected.scores)
-
-            let sortedSwift =
-                swiftPairs
-                .map { ($0.0, $0.1) }
-                .sorted { lhs, rhs in
-                    let diff = lhs.1 - rhs.1
-                    if abs(diff) > tolerance { return diff > 0 }
-                    return lhs.0 < rhs.0
-                }
-            let sortedExpected =
-                expectedPairs
-                .map { (Int($0.0), $0.1) }
-                .sorted { lhs, rhs in
-                    let diff = lhs.1 - rhs.1
-                    if abs(diff) > tolerance { return diff > 0 }
-                    return lhs.0 < rhs.0
-                }
-
-            if sortedSwift.map(\.0) != sortedExpected.map(\.0) {
-                print("⚠️  Passage ID mismatch for query \(result.queryId)")
-                print("    Swift : \(sortedSwift.map(\.0))")
-                print("    Python: \(sortedExpected.map(\.0))")
-                mismatches += 1
-            }
-
-            let count = min(sortedSwift.count, sortedExpected.count)
-            for idx in 0 ..< count {
-                let delta = abs(sortedSwift[idx].1 - Float(sortedExpected[idx].1))
-                if delta > tolerance {
-                    print(
-                        String(
-                            format:
-                                "⚠️  Score mismatch q%03d #%02d | swift=%.6f python=%.6f (Δ=%.6f)",
-                            result.queryId,
-                            idx,
-                            sortedSwift[idx].1,
-                            sortedExpected[idx].1,
-                            delta
-                        )
-                    )
-                    mismatches += 1
-                }
-            }
-        }
-
-        if mismatches == 0 {
-            print("✅ Swift results match python_results.json within ±\(tolerance).")
-        } else {
-            print("⚠️  Detected \(mismatches) differences against python_results.json.")
-        }
-        print("")
-    }
-
-    private struct FixtureResult: Decodable {
-        let query_id: Int
-        let passage_ids: [Int]
-        let scores: [Float]
-    }
-
-    private struct FixtureConfig: Decodable {
-        let embedding_dim: Int?
-        let nbits: Int
-        let top_k: Int?
-        let batch_size: Int?
     }
 
     // MARK: - User-Facing CLI Commands
