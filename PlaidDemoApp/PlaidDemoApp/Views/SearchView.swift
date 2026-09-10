@@ -93,7 +93,7 @@ struct SearchView: View {
                         Spacer()
                     }
                 } else if !isSearchEnabled {
-                    // No indexed data - prompt to add a folder
+                    // No indexed data - prompt to add a folder or load samples
                     VStack(spacing: 16) {
                         Spacer()
                         Image(systemName: "folder.badge.questionmark")
@@ -102,11 +102,18 @@ struct SearchView: View {
                         Text("No documents indexed")
                             .font(.headline)
                             .foregroundColor(.secondary)
-                        Text("Tap \"Add Folder\" above to index documents")
+                        Text("Add a folder above, or try the bundled sample documents")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button(action: loadSampleDocuments) {
+                            Label("Load Sample Documents", systemImage: "sparkles")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(searchEngine.isIndexing)
                         Spacer()
                     }
+                    .padding(.horizontal)
                 } else if searchResults.isEmpty && !searchText.isEmpty {
                     VStack(spacing: 16) {
                         Spacer()
@@ -154,12 +161,11 @@ struct SearchView: View {
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: { showDirectoryPicker = true }) {
+                        addContentMenu {
                             Image(systemName: "folder.badge.plus")
                             .font(.body)
                             .foregroundColor(searchEngine.isIndexing ? .gray : .blue)
                         }
-                        .disabled(searchEngine.isIndexing)
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { showSettings = true }) {
@@ -175,11 +181,10 @@ struct SearchView: View {
             #else
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
-                        Button(action: { showDirectoryPicker = true }) {
+                        addContentMenu {
                             Image(systemName: "folder.badge.plus")
                             .foregroundColor(searchEngine.isIndexing ? .gray : .blue)
                         }
-                        .disabled(searchEngine.isIndexing)
                     }
                     ToolbarItem(placement: .automatic) {
                         Button(action: { showSettings = true }) {
@@ -291,6 +296,40 @@ struct SearchView: View {
 
         case .failure(let error):
             print("❌ Directory picker error: \(error)")
+        }
+    }
+
+    /// Toolbar affordance offering both "Add Folder…" and "Load Sample Documents".
+    @ViewBuilder
+    private func addContentMenu<LabelContent: View>(
+        @ViewBuilder label: () -> LabelContent
+    ) -> some View {
+        Menu {
+            Button {
+                showDirectoryPicker = true
+            } label: {
+                Label("Add Folder…", systemImage: "folder.badge.plus")
+            }
+            Button(action: loadSampleDocuments) {
+                Label("Load Sample Documents", systemImage: "sparkles")
+            }
+        } label: {
+            label()
+        }
+        .disabled(searchEngine.isIndexing)
+    }
+
+    /// Index the demo/sample documents bundled in the app.
+    private func loadSampleDocuments() {
+        Task {
+            do {
+                try await searchEngine.indexBundledSamples()
+            } catch {
+                print("❌ Error indexing samples: \(error)")
+                await MainActor.run {
+                    searchEngine.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 

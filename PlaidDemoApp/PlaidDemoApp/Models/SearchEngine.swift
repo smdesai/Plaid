@@ -462,12 +462,28 @@ class SearchEngine: ObservableObject {
 
         print("  ✅ Found \(enrichedResults.count) results")
 
+        // The engine's raw score is ColBERT MaxSim: a *sum* of the best per-token
+        // cosine over the query tokens, so it scales with query length and is not
+        // bounded to [0, 1]. Divide by the query-token count to get the average
+        // best-per-token cosine (~[0, 1]) — a genuine, query-length-independent
+        // relevance that the UI can render as 0–100%. Ranking is unchanged: every
+        // score for this query is divided by the same constant.
+        //
+        // Queries are zero-padded to `queryLength` (see ColbertModel.normalizeAndPadQueries),
+        // and those padding rows are zero vectors that contribute 0 to the MaxSim sum.
+        // Dividing by the padded row count would deflate the score, so count only the
+        // real (non-zero) query tokens that actually contribute.
+        let realTokenCount = queryEmbedding.reduce(into: 0) { count, row in
+            if row.contains(where: { $0 != 0 }) { count += 1 }
+        }
+        let queryTokenCount = Float(max(realTokenCount, 1))
+
         return enrichedResults.map { enriched in
             SearchResult(
                 documentId: enriched.plaidDocId,
                 filename: enriched.documentName,
                 chunkIndex: enriched.chunkIndex,
-                score: enriched.score,
+                score: enriched.score / queryTokenCount,
                 text: enriched.chunkText
             )
         }
@@ -638,6 +654,56 @@ class SearchEngine: ObservableObject {
         }
 
         print("📚 Found \(documents.count) documents to index")
+
+        // Create the index
+        try await createIndex(documents: documents)
+    }
+
+    /// Index the demo/sample text files bundled in the app's Resources.
+    ///
+    /// Mirrors `indexDirectory(at:)` but sources documents from `Bundle.main`
+    /// instead of a user-selected folder, so the app is usable out of the box
+    /// without importing anything. The sample `.txt` files are flattened into
+    /// the app bundle at build time, so we enumerate every bundled `.txt`.
+    func indexBundledSamples() async throws {
+        guard colbert != nil else {
+            throw SearchEngineError.modelNotInitialized
+        }
+
+        print("📦 Indexing bundled sample documents")
+
+        // Enumerate bundled .txt resources (sorted for deterministic ordering)
+        let sampleURLs =
+            (Bundle.main.urls(forResourcesWithExtension: "txt", subdirectory: nil) ?? [])
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        var documents: [Document] = []
+        for fileURL in sampleURLs {
+            do {
+                let text = try String(contentsOf: fileURL, encoding: .utf8)
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+
+                let filename = fileURL.lastPathComponent
+                documents.append(Document(filename: filename, text: text))
+                print("  📄 Sample: \(filename) (\(text.count) chars)")
+            } catch {
+                print("  ⚠️  Skipping \(fileURL.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        guard !documents.isEmpty else {
+            throw NSError(
+                domain: "PlaidDemo",
+                code: 3,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "No bundled sample documents were found"
+                ]
+            )
+        }
+
+        print("📚 Found \(documents.count) sample documents to index")
 
         // Create the index
         try await createIndex(documents: documents)
