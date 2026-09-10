@@ -28,6 +28,10 @@ DerivedData/
 *.ipa
 *.xcuserstate
 
+# XcodeGen: project.yml is the source of truth; the .xcodeproj is generated.
+# Run `xcodegen generate` (from PlaidDemoApp/) after cloning or pulling.
+PlaidDemoApp/PlaidDemoApp.xcodeproj/
+
 # Swift Package Manager
 .build/
 .swiftpm/
