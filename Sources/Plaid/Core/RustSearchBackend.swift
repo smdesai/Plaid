@@ -13,7 +13,7 @@ import NextPlaidBindings
 /// Live `PlaidIndex` handles are cached per index path. `add`/`remove` mutate
 /// the cached handle in place (the Rust side reloads under its own lock), so the
 /// cache stays valid across those calls; `create` replaces the handle.
-public final class RustSearchBackend: SearchBackend {
+public final class RustSearchBackend: SearchBackend, @unchecked Sendable {
     /// Engine defaults for parameters the Swift `SearchParameters` struct omits.
     private static let defaultCentroidBatchSize: UInt64 = 100_000
     private static let defaultCentroidScoreThreshold: Float = 0.4
@@ -64,6 +64,25 @@ public final class RustSearchBackend: SearchBackend {
         return EmbeddingMatrix(data: data, rows: UInt32(rows), cols: UInt32(cols))
     }
 
+    /// Normalize + pack a batch of document token matrices. Each document is
+    /// independent, so fan the pure-CPU work out across cores. Order-preserving:
+    /// result `i` corresponds to `embeddings[i]`.
+    private func packMatrices(_ embeddings: [[[Float]]]) -> [EmbeddingMatrix] {
+        guard !embeddings.isEmpty else { return [] }
+        if embeddings.count == 1 { return [matrix(from: embeddings[0])] }
+
+        var out = [EmbeddingMatrix](
+            repeating: EmbeddingMatrix(data: Data(), rows: 0, cols: 0),
+            count: embeddings.count
+        )
+        out.withUnsafeMutableBufferPointer { buffer in
+            DispatchQueue.concurrentPerform(iterations: embeddings.count) { i in
+                buffer[i] = matrix(from: embeddings[i])
+            }
+        }
+        return out
+    }
+
     /// Unpack an `EmbeddingMatrix` (little-endian `f32`, row-major) to `[[Float]]`.
     private func tokens(from matrix: EmbeddingMatrix) -> [[Float]] {
         let rows = Int(matrix.rows)
@@ -95,7 +114,7 @@ public final class RustSearchBackend: SearchBackend {
     ) throws {
         // `centroids` is ignored: the Rust engine computes its own k-means.
         guard !embeddings.isEmpty else { throw PlaidError.emptyEmbeddingSet }
-        let matrices = embeddings.map { matrix(from: $0) }
+        let matrices = packMatrices(embeddings)
         let config = FfiIndexConfig(
             nbits: UInt64(nbits),
             batchSize: UInt64(batchSize),
@@ -119,7 +138,7 @@ public final class RustSearchBackend: SearchBackend {
     ) throws -> [Int] {
         guard !embeddings.isEmpty else { return [] }
         let index = try handle(for: indexURL)
-        let matrices = embeddings.map { matrix(from: $0) }
+        let matrices = packMatrices(embeddings)
         let config = FfiUpdateConfig(
             batchSize: UInt64(batchSize),
             kmeansNiters: 4,

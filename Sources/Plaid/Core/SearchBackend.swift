@@ -19,7 +19,10 @@ public struct DeleteOutcome: Sendable {
 /// Embeddings are `[[[Float]]]` = documents × tokens × dim, **raw/unnormalized**
 /// as produced by the CoreML encoder. Each implementation normalizes as its
 /// engine requires (the Rust engine expects unit-L2 rows and normalizes nothing).
-public protocol SearchBackend {
+///
+/// `Sendable` so callers can drive create/update from a background task while
+/// keeping their UI actor free.
+public protocol SearchBackend: Sendable {
     /// Build a fresh index at `indexURL` from `embeddings`.
     /// `centroids` are only used by the legacy engine; the Rust engine computes
     /// its own and ignores the argument.

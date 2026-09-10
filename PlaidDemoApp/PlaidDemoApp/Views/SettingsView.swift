@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var showModelChangeWarning = false
     @State private var isDeleting = false
+    @AppStorage(SearchEngine.encodeBatchSizeKey) private var encodeBatchSize: Int =
+        SearchEngine.defaultEncodeBatchSize
 
     init(searchEngine: SearchEngine) {
         self.searchEngine = searchEngine
@@ -99,6 +101,40 @@ struct SettingsView: View {
                             .background(Color.orange.opacity(0.1))
                             .cornerRadius(12)
                         }
+                    }
+
+                    // Indexing Section (encode throughput tuning)
+                    VStack(alignment: .leading, spacing: 16) {
+                        sectionHeader(title: "Indexing", icon: "speedometer")
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "square.stack.3d.up")
+                                    .font(.body)
+                                    .foregroundColor(.indigo)
+                                    .frame(width: 28)
+
+                                Text("Encode batch size")
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+
+                            Picker("Encode batch size", selection: $encodeBatchSize) {
+                                ForEach(SearchEngine.encodeBatchSizeOptions, id: \.self) { size in
+                                    Text("\(size)").tag(size)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(
+                                "Chunks encoded per Core ML call. Higher can improve ANE/GPU utilization but raises peak memory. Applies on the next index."
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(12)
                     }
 
                     // Danger Zone Section

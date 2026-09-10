@@ -7,10 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7B0B0003 /* ObjectBox.xcframework in Frameworks */ = {isa = PBXBuildFile; productRef = 7B0B0002 /* ObjectBox.xcframework */; };
+		7B0B0011 /* generated/EntityInfo-PlaidDemoApp.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0B0010 /* generated/EntityInfo-PlaidDemoApp.generated.swift */; };
 		7B4E75EA2EBE627F00D1DAE0 /* ModelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */; };
 		7B4E75EC2EBE629200D1DAE0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */; };
-		7B5AC46F2ED17BC100E7D998 /* ObjectBox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */; };
-		7B5AC4702ED17BC100E7D998 /* ObjectBox.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7B5AC4802ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5AC47F2ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift */; };
 		7BD6BE0E2EBD304E0045A16C /* health_tips_es.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE052EBD304E0045A16C /* health_tips_es.txt */; };
 		7BD6BE0F2EBD304E0045A16C /* swift_programming_ja.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7BD6BE0A2EBD304E0045A16C /* swift_programming_ja.txt */; };
@@ -28,6 +28,7 @@
 		AA0005 /* ResultCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0105 /* ResultCard.swift */; };
 		AA0006 /* IndexState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0106 /* IndexState.swift */; };
 		AA0007 /* SearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0107 /* SearchEngine.swift */; };
+		AA00B0 /* BoundedBatchQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01B0 /* BoundedBatchQueue.swift */; };
 		AA0008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0201 /* Assets.xcassets */; };
 		AA0009 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0202 /* Preview Assets.xcassets */; };
 		AA0010 /* swift_programming.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA0301 /* swift_programming.txt */; };
@@ -44,24 +45,10 @@
 		CB0020 /* Plaid in Frameworks */ = {isa = PBXBuildFile; productRef = CB0019 /* Plaid */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		7B5AC4712ED17BC100E7D998 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				7B5AC4702ED17BC100E7D998 /* ObjectBox.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
+		7B0B0010 /* generated/EntityInfo-PlaidDemoApp.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "generated/EntityInfo-PlaidDemoApp.generated.swift"; sourceTree = "<group>"; };
 		7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreferences.swift; sourceTree = "<group>"; };
 		7B4E75EB2EBE629200D1DAE0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ObjectBox.xcframework; path = Frameworks/ObjectBox.xcframework; sourceTree = "<group>"; };
 		7B5AC47F2ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectBoxMetadataProvider.swift; sourceTree = "<group>"; };
 		7BD6BE052EBD304E0045A16C /* health_tips_es.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_es.txt; sourceTree = "<group>"; };
 		7BD6BE062EBD304E0045A16C /* health_tips_fr.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = health_tips_fr.txt; sourceTree = "<group>"; };
@@ -80,6 +67,7 @@
 		AA0105 /* ResultCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultCard.swift; sourceTree = "<group>"; };
 		AA0106 /* IndexState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexState.swift; sourceTree = "<group>"; };
 		AA0107 /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
+		AA01B0 /* BoundedBatchQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedBatchQueue.swift; sourceTree = "<group>"; };
 		AA0201 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0202 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		AA0301 /* swift_programming.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = swift_programming.txt; sourceTree = "<group>"; };
@@ -100,7 +88,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7B5AC46F2ED17BC100E7D998 /* ObjectBox.xcframework in Frameworks */,
+				7B0B0003 /* ObjectBox.xcframework in Frameworks */,
 				AA0020 /* Plaid in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -119,7 +107,6 @@
 		7B5AC46D2ED17BC100E7D998 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				7B5AC46E2ED17BC100E7D998 /* ObjectBox.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -137,6 +124,7 @@
 			children = (
 				AA8100 /* PlaidDemoApp */,
 				CB8100 /* ToolSelection */,
+				7B0B0010 /* generated/EntityInfo-PlaidDemoApp.generated.swift */,
 				7B5AC46D2ED17BC100E7D998 /* Frameworks */,
 				AA8200 /* Products */,
 			);
@@ -162,6 +150,7 @@
 				7B4E75E92EBE627F00D1DAE0 /* ModelPreferences.swift */,
 				AA0106 /* IndexState.swift */,
 				AA0107 /* SearchEngine.swift */,
+				AA01B0 /* BoundedBatchQueue.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -262,7 +251,6 @@
 				AA9010 /* Sources */,
 				AA9000 /* Frameworks */,
 				AA9020 /* Resources */,
-				7B5AC4712ED17BC100E7D998 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -271,6 +259,7 @@
 			name = PlaidDemoApp;
 			packageProductDependencies = (
 				AA0019 /* Plaid */,
+				7B0B0002 /* ObjectBox.xcframework */,
 			);
 			productName = PlaidDemoApp;
 			productReference = AA0000 /* PlaidDemoApp.app */;
@@ -325,6 +314,7 @@
 			mainGroup = AA8000;
 			packageReferences = (
 				AA0018 /* XCLocalSwiftPackageReference ".." */,
+				7B0B0001 /* XCRemoteSwiftPackageReference "objectbox-swift-spm" */,
 			);
 			productRefGroup = AA8200 /* Products */;
 			projectDirPath = "";
@@ -382,7 +372,9 @@
 				AA0005 /* ResultCard.swift in Sources */,
 				AA0006 /* IndexState.swift in Sources */,
 				7B5AC4802ED17D7500E7D998 /* ObjectBoxMetadataProvider.swift in Sources */,
+				7B0B0011 /* generated/EntityInfo-PlaidDemoApp.generated.swift in Sources */,
 				AA0007 /* SearchEngine.swift in Sources */,
+				AA00B0 /* BoundedBatchQueue.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -546,7 +538,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.PlaidDemoApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.PlaidDemoApp2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -579,7 +571,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.PlaidDemoApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sdesai.PlaidDemoApp2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -682,7 +674,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		7B0B0001 /* XCRemoteSwiftPackageReference "objectbox-swift-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/objectbox/objectbox-swift-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		7B0B0002 /* ObjectBox.xcframework */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7B0B0001 /* XCRemoteSwiftPackageReference "objectbox-swift-spm" */;
+			productName = ObjectBox.xcframework;
+		};
 		AA0019 /* Plaid */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA0018 /* XCLocalSwiftPackageReference ".." */;

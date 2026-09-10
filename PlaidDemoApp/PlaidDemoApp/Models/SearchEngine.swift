@@ -32,6 +32,22 @@ class SearchEngine: ObservableObject {
 
     private static let currentModelKey = "currentModel"
 
+    /// UserDefaults key for the Core ML encode batch size (tunable in Settings
+    /// for on-device throughput experiments).
+    nonisolated static let encodeBatchSizeKey = "encodeBatchSize"
+    /// Encode batch size used when the user hasn't chosen one.
+    nonisolated static let defaultEncodeBatchSize = 32
+    /// Batch sizes offered in Settings for sweeping encode throughput.
+    nonisolated static let encodeBatchSizeOptions = [8, 16, 32, 48, 64]
+
+    /// The encode batch size currently selected in Settings, or the default.
+    /// Read fresh from `UserDefaults` so a change takes effect on the next index
+    /// without reloading the model.
+    nonisolated static var encodeBatchSize: Int {
+        let stored = UserDefaults.standard.integer(forKey: encodeBatchSizeKey)
+        return stored > 0 ? stored : defaultEncodeBatchSize
+    }
+
     init(backend: SearchBackend = RustSearchBackend()) {
         self.backend = backend
 
@@ -87,7 +103,7 @@ class SearchEngine: ObservableObject {
         self.colbert = ColbertModel(
             generator: generator,
             configuration: .init(
-                batchSize: 32,
+                batchSize: SearchEngine.encodeBatchSize,
                 embeddingDimension: model.embeddingDimension,
                 queryLength: tokenizer.maxSequenceLength,
                 documentLength: tokenizer.maxSequenceLength
@@ -137,163 +153,237 @@ class SearchEngine: ObservableObject {
             && FileManager.default.fileExists(atPath: statePath.path)
     }
 
+    /// One encoded chunk handed from the encoder stage to the indexer stage.
+    private struct EncodedChunkBatchItem: Sendable {
+        let documentName: String
+        let chunkIndex: Int
+        let text: String
+        let embeddings: [[Float]]
+    }
+
     /// Create a new index from documents
     /// Each document is chunked and each chunk becomes a separate searchable unit
     func createIndex(documents: [Document]) async throws {
-        guard let colbert = colbert else {
+        guard var colbert = colbert else {
             throw SearchEngineError.modelNotInitialized
         }
+        // Pick up the current encode batch-size setting so a change made in
+        // Settings takes effect on the next index without reloading the model.
+        colbert.batchSize = SearchEngine.encodeBatchSize
 
         print("🏗️  Creating index from \(documents.count) documents...")
 
-        await MainActor.run {
-            isIndexing = true
-            indexingProgress = 0.0
-            errorMessage = nil
-        }
+        isIndexing = true
+        indexingProgress = 0.0
+        errorMessage = nil
 
-        // Streaming/batched indexing. Rather than accumulate every chunk's
-        // embeddings in RAM and build the index in one `create` (which peaks at
-        // the whole corpus — hundreds of MB for large inputs), we encode into a
-        // bounded batch, flush it to the engine, and release it. The first flush
-        // `create`s the index; later flushes `update` (append).
-        //
-        // Peak memory is bounded to ~one batch on the Swift side. On the Rust
-        // side, while the index still has ≤ `start_from_scratch` (999) chunks an
-        // `update` rebuilds from the retained raw embeddings — but 999 is a
-        // constant, so that window is O(999²) total, not O(N²), and once the
-        // corpus grows past it the engine switches to incremental
-        // buffer/centroid-expansion appends. Net: peak ≈ one batch + the ≤999
-        // rebuild window, independent of corpus size.
-        let batchChunkThreshold = 1024
+        // Capture the pieces the background pipeline needs so no heavy work runs
+        // on the main actor (it stays free to publish progress + keep the UI live).
+        let backend = self.backend
+        let metadataProvider = self.metadataProvider
+        let indexURL = self.indexURL
+        let indexName = self.indexName
+        let embeddingDim = self.embeddingDim
+        let nbits = self.nbits
 
-        var batchEmbeddings: [[[Float]]] = []
-        var batchMetadata:
-            [(
-                plaidDocId: Int, documentName: String, chunkText: String, chunkIndex: Int,
-                filePath: String?
-            )] = []
-        var documentMetadata: [Int: DocumentMetadata] = [:]
-        var currentPlaidDocId = 0
-        var totalChunks = 0
-        var totalEmbeddings = 0
-        var didCreate = false
-
-        // Flush the accumulated batch to the engine + ObjectBox, then release it.
-        func flushBatch() async throws {
-            guard !batchEmbeddings.isEmpty else { return }
-
-            if !didCreate {
-                // First flush builds the index. The Rust engine computes its own
-                // k-means and ignores `centroids`; the legacy engine consumes
-                // them. Passing them (from this first batch) keeps both correct.
-                print("💾 Creating Plaid index (first batch of \(batchEmbeddings.count) chunks)...")
-                let centroids = try generateCentroids(from: batchEmbeddings)
-                try backend.create(
-                    indexURL: indexURL,
-                    embeddingDim: embeddingDim,
-                    nbits: nbits,
-                    embeddings: batchEmbeddings,
-                    centroids: centroids,
-                    batchSize: 64,
-                    seed: 42
-                )
-                didCreate = true
-            } else {
-                print("➕ Appending \(batchEmbeddings.count) chunks to Plaid index...")
-                _ = try backend.update(
-                    indexURL: indexURL,
-                    embeddings: batchEmbeddings,
-                    batchSize: 64
-                )
-            }
-
-            try await metadataProvider.registerDocuments(batchMetadata, indexName: indexName)
-
-            batchEmbeddings.removeAll(keepingCapacity: true)
-            batchMetadata.removeAll(keepingCapacity: true)
-        }
-
-        // Encode each document using chunk-aware encoding, flushing as batches fill
-        for (docIndex, doc) in documents.enumerated() {
-            await MainActor.run {
-                currentDocument = doc.filename
-                indexingProgress = Double(docIndex) / Double(documents.count)
-            }
-
-            print("📄 Encoding document [\(docIndex + 1)/\(documents.count)]: \(doc.filename)")
-
-            // Use encodeDocument to get individual chunks with their text
-            let chunkedResult = try colbert.encodeDocument(doc.text)
-
-            print(
-                "  ✅ \(chunkedResult.chunks.count) chunks, \(chunkedResult.totalEmbeddingCount) total embeddings"
+        do {
+            let totals = try await Self.runIndexingPipeline(
+                documents: documents,
+                colbert: colbert,
+                backend: backend,
+                metadataProvider: metadataProvider,
+                indexURL: indexURL,
+                indexName: indexName,
+                embeddingDim: embeddingDim,
+                nbits: nbits,
+                batchChunkThreshold: 1024,
+                onProgress: { [weak self] docIndex, docCount, filename in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.currentDocument = filename
+                        self.indexingProgress = Double(docIndex) / Double(max(docCount, 1))
+                    }
+                }
             )
 
-            // Each chunk becomes a separate entry in Plaid index. Its plaidDocId
-            // is the engine's internal id: `create` assigns 0…, and each `update`
-            // appends contiguously after, so this running counter stays in lockstep.
-            for chunk in chunkedResult.chunks {
-                batchEmbeddings.append(chunk.embeddings)
+            // ObjectBox is the source of truth for per-chunk metadata, so the
+            // persisted state carries only the summary — keeping this dict empty
+            // avoids holding every chunk's text for the whole corpus in RAM.
+            self.indexState = IndexState(
+                documents: [:],
+                createdAt: Date(),
+                lastModified: Date(),
+                totalDocuments: totals.totalChunks,
+                totalEmbeddings: totals.totalEmbeddings
+            )
+            try saveIndexState()
 
-                batchMetadata.append(
-                    (
-                        plaidDocId: currentPlaidDocId,
-                        documentName: doc.filename,
-                        chunkText: chunk.text,
-                        chunkIndex: chunk.chunkIndex,
-                        filePath: nil
-                    ))
-
-                documentMetadata[currentPlaidDocId] = DocumentMetadata(
-                    id: currentPlaidDocId,
-                    filename: doc.filename,
-                    addedAt: Date(),
-                    characterCount: chunk.text.count,
-                    embeddingCount: chunk.embeddings.count,
-                    text: chunk.text,
-                    originalDocId: docIndex
-                )
-
-                currentPlaidDocId += 1
-                totalChunks += 1
-                totalEmbeddings += chunk.embeddings.count
-
-                if batchEmbeddings.count >= batchChunkThreshold {
-                    try await flushBatch()
-                }
-            }
-        }
-
-        // Flush the trailing partial batch (also handles small corpora, where
-        // this is the only flush and behaves exactly like the old single create).
-        try await flushBatch()
-
-        guard didCreate else {
-            await MainActor.run { isIndexing = false }
-            throw SearchEngineError.noEmbeddings
-        }
-
-        // Save index state
-        self.indexState = IndexState(
-            documents: documentMetadata,
-            createdAt: Date(),
-            lastModified: Date(),
-            totalDocuments: totalChunks,
-            totalEmbeddings: totalEmbeddings
-        )
-        try saveIndexState()
-
-        await MainActor.run {
             isIndexing = false
             hasIndex = true
             indexingProgress = 1.0
-        }
 
-        print("✅ Index created successfully!")
-        print(
-            "   📊 \(documents.count) documents → \(totalChunks) chunks → \(totalEmbeddings) embeddings"
-        )
+            print("✅ Index created successfully!")
+            print(
+                "   📊 \(documents.count) documents → \(totals.totalChunks) chunks → \(totals.totalEmbeddings) embeddings"
+            )
+        } catch {
+            isIndexing = false
+            throw error
+        }
+    }
+
+    /// Runs the encode → index → store pipeline off the main actor as two
+    /// overlapping stages joined by a bounded FIFO:
+    ///
+    ///  - **Producer (encoder):** walks documents in order, chunks + encodes each
+    ///    (CoreML / ANE), accumulates a batch, and `enqueue`s it. Backpressure
+    ///    from the bounded queue caps peak memory to ~2 batches.
+    ///  - **Consumer (indexer):** dequeues batches FIFO, assigns the running
+    ///    `plaidDocId` (so ids stay contiguous and in lockstep with the
+    ///    `create`/`update` order), builds the index (Rust FFI, CPU) and writes
+    ///    ObjectBox metadata.
+    ///
+    /// Overlapping the two stages lets ANE/GPU encoding run while the previous
+    /// batch is quantized + written to disk. Streaming keeps peak memory bounded:
+    /// the Rust engine rebuilds from retained raw embeddings only while the index
+    /// has ≤ `start_from_scratch` (999) chunks — a constant window — then switches
+    /// to incremental appends.
+    private nonisolated static func runIndexingPipeline(
+        documents: [Document],
+        colbert: ColbertModel,
+        backend: SearchBackend,
+        metadataProvider: ObjectBoxMetadataProvider,
+        indexURL: URL,
+        indexName: String,
+        embeddingDim: Int,
+        nbits: Int,
+        batchChunkThreshold: Int,
+        onProgress:
+            @Sendable @escaping (_ docIndex: Int, _ docCount: Int, _ filename: String) -> Void
+    ) async throws -> (totalChunks: Int, totalEmbeddings: Int) {
+        let queue = BoundedBatchQueue<[EncodedChunkBatchItem]>(capacity: 2)
+
+        return try await withThrowingTaskGroup(
+            of: (totalChunks: Int, totalEmbeddings: Int)?.self
+        ) { group in
+            // Producer: encode documents into bounded batches.
+            group.addTask {
+                do {
+                    var batch: [EncodedChunkBatchItem] = []
+                    batch.reserveCapacity(batchChunkThreshold)
+
+                    for (docIndex, doc) in documents.enumerated() {
+                        onProgress(docIndex, documents.count, doc.filename)
+                        print(
+                            "📄 Encoding document [\(docIndex + 1)/\(documents.count)]: \(doc.filename)"
+                        )
+
+                        let chunked = try colbert.encodeDocument(doc.text)
+                        print(
+                            "  ✅ \(chunked.chunks.count) chunks, \(chunked.totalEmbeddingCount) total embeddings"
+                        )
+
+                        for chunk in chunked.chunks {
+                            batch.append(
+                                EncodedChunkBatchItem(
+                                    documentName: doc.filename,
+                                    chunkIndex: chunk.chunkIndex,
+                                    text: chunk.text,
+                                    embeddings: chunk.embeddings
+                                ))
+
+                            if batch.count >= batchChunkThreshold {
+                                let outgoing = batch
+                                batch.removeAll(keepingCapacity: true)
+                                let accepted = await queue.enqueue(outgoing)
+                                if !accepted { return nil }  // consumer failed; stop early
+                            }
+                        }
+                    }
+
+                    if !batch.isEmpty {
+                        _ = await queue.enqueue(batch)
+                    }
+                    await queue.finish()
+                    return nil
+                } catch {
+                    await queue.fail(error)
+                    throw error
+                }
+            }
+
+            // Consumer: build the index + write metadata in dequeue order.
+            group.addTask {
+                do {
+                    var didCreate = false
+                    var currentPlaidDocId = 0
+                    var totalChunks = 0
+                    var totalEmbeddings = 0
+
+                    while let batch = await queue.dequeue() {
+                        let embeddings = batch.map { $0.embeddings }
+
+                        if !didCreate {
+                            print(
+                                "💾 Creating Plaid index (first batch of \(batch.count) chunks)...")
+                            // The Rust engine computes its own k-means and ignores
+                            // `centroids`; the legacy engine consumes them.
+                            let centroids = try generateCentroids(
+                                from: embeddings, nbits: nbits, embeddingDim: embeddingDim)
+                            try backend.create(
+                                indexURL: indexURL,
+                                embeddingDim: embeddingDim,
+                                nbits: nbits,
+                                embeddings: embeddings,
+                                centroids: centroids,
+                                batchSize: 64,
+                                seed: 42
+                            )
+                            didCreate = true
+                        } else {
+                            print("➕ Appending \(batch.count) chunks to Plaid index...")
+                            _ = try backend.update(
+                                indexURL: indexURL, embeddings: embeddings, batchSize: 64)
+                        }
+
+                        var metadata:
+                            [(
+                                plaidDocId: Int, documentName: String, chunkText: String,
+                                chunkIndex: Int, filePath: String?
+                            )] = []
+                        metadata.reserveCapacity(batch.count)
+                        for item in batch {
+                            metadata.append(
+                                (
+                                    plaidDocId: currentPlaidDocId,
+                                    documentName: item.documentName,
+                                    chunkText: item.text,
+                                    chunkIndex: item.chunkIndex,
+                                    filePath: nil
+                                ))
+                            currentPlaidDocId += 1
+                            totalChunks += 1
+                            totalEmbeddings += item.embeddings.count
+                        }
+                        try await metadataProvider.registerDocuments(metadata, indexName: indexName)
+                    }
+
+                    if let failure = await queue.failure { throw failure }
+                    guard didCreate else { throw SearchEngineError.noEmbeddings }
+                    return (totalChunks, totalEmbeddings)
+                } catch {
+                    await queue.fail(error)
+                    throw error
+                }
+            }
+
+            var outcome: (totalChunks: Int, totalEmbeddings: Int)?
+            for try await value in group {
+                if let value { outcome = value }
+            }
+            guard let outcome else { throw SearchEngineError.noEmbeddings }
+            return outcome
+        }
     }
 
     /// Search the index using Plaid's native MaxSim (late interaction) scoring
@@ -424,8 +514,14 @@ class SearchEngine: ObservableObject {
         return (nFullScores, nIvfProbe)
     }
 
-    /// Generate centroids from embeddings using uniform sampling
-    private func generateCentroids(from embeddings: [[[Float]]]) throws -> [[Float]] {
+    /// Generate centroids from embeddings using uniform sampling.
+    ///
+    /// `nonisolated static` so the background indexing pipeline can call it
+    /// off the main actor. Only the legacy engine uses these; the Rust engine
+    /// computes its own k-means and ignores them.
+    nonisolated static func generateCentroids(
+        from embeddings: [[[Float]]], nbits: Int, embeddingDim: Int
+    ) throws -> [[Float]] {
         let numCentroids = 1 << nbits  // 4 centroids for nbits=2
 
         var allVectors: [[Float]] = []
@@ -458,7 +554,7 @@ class SearchEngine: ObservableObject {
     }
 
     /// Normalize a vector to unit length
-    private func normalize(_ vector: [Float]) -> [Float] {
+    nonisolated static func normalize(_ vector: [Float]) -> [Float] {
         let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
         guard norm > 0 else { return vector }
         return vector.map { $0 / norm }

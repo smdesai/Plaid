@@ -163,7 +163,7 @@ struct SearchView: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { showSettings = true }) {
-                            Image(systemName: "gear")
+                            Image(systemName: "gearshape")
                             .font(.body)
                             .foregroundColor(.blue)
                         }
@@ -183,7 +183,7 @@ struct SearchView: View {
                     }
                     ToolbarItem(placement: .automatic) {
                         Button(action: { showSettings = true }) {
-                            Image(systemName: "gear")
+                            Image(systemName: "gearshape")
                         }
                     }
                 }

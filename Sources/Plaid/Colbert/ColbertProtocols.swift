@@ -18,7 +18,7 @@ public struct ColbertEmbeddingBatch {
 ///
 /// Different backends (MLX, Core ML, Metal, etc.) can conform to this protocol
 /// to supply token-level embeddings alongside their attention masks.
-public protocol ColbertEmbeddingGenerator {
+public protocol ColbertEmbeddingGenerator: Sendable {
     /// Generate embeddings for a single sentence
     func generateEmbeddings(
         for sentence: String,
@@ -52,6 +52,21 @@ public protocol ColbertEmbeddingGenerator {
 
     /// Tokenize text to IDs without adding special tokens (for chunking)
     func tokenizeToIds(text: String) -> [Int]
+
+    /// Phase 1 of a batch encode: build the model inputs (tokenize + pack into
+    /// `MLMultiArray`s) without running inference. This is the CPU-bound half and
+    /// can be run ahead of time on a background thread so it overlaps the GPU work
+    /// of a previous batch. Composing `prepareBatch` then `runPreparedBatch`
+    /// produces the same result as `generateEmbeddingsBatch(for:)`.
+    func prepareBatch(
+        for sentences: [String],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> PreparedColbertBatch
+
+    /// Phase 2 of a batch encode: run inference on inputs built by `prepareBatch`
+    /// and extract the embeddings. This is the GPU-bound half.
+    func runPreparedBatch(_ prepared: PreparedColbertBatch) throws -> [ColbertEmbeddingBatch]
 }
 
 /// Default implementation processes sentences individually
@@ -79,7 +94,7 @@ extension ColbertEmbeddingGenerator {
 }
 
 /// Defines how input sentences are chunked before encoding.
-public protocol SentenceChunker {
+public protocol SentenceChunker: Sendable {
     func chunk(for sentence: String, chunkSize: Int, overlapSize: Int) -> [String]
 
     /// Chunk token IDs directly without intermediate text conversion (performance optimized)
@@ -87,7 +102,10 @@ public protocol SentenceChunker {
 }
 
 /// Default chunker that slices inputs into fixed-size batches.
-public struct TokenSplitter: SentenceChunker {
+///
+/// `@unchecked Sendable`: the only stored value is a tokenizer used read-only
+/// during chunking (immutable after init), safe to share across tasks.
+public struct TokenSplitter: SentenceChunker, @unchecked Sendable {
     let tokenizer: any TokenizerProtocol
 
     public init(withTokenizer: any TokenizerProtocol) {
@@ -213,7 +231,10 @@ public struct TokenSplitter: SentenceChunker {
     /// - ~10-20% overhead for sentence detection
     /// - ~5-15% lower token utilization (gaps at chunk boundaries)
     /// - Significantly improved search quality
-    public struct SentenceBoundarySplitter: SentenceChunker {
+    ///
+    /// `@unchecked Sendable`: holds only a tokenizer used read-only during
+    /// chunking (immutable after init), safe to share across tasks.
+    public struct SentenceBoundarySplitter: SentenceChunker, @unchecked Sendable {
         let tokenizer: any TokenizerProtocol
 
         public init(withTokenizer: any TokenizerProtocol) {
@@ -293,8 +314,12 @@ public struct TokenSplitter: SentenceChunker {
                         chunks.append(chunkText)
                     }
 
-                    // Start new chunk with overlap
-                    let overlapSentences = calculateOverlapSentences(
+                    // Start new chunk with overlap. Reuse the cached per-sentence
+                    // token counts for the running total instead of re-tokenizing
+                    // the overlap sentences — the sum is drawn from the same counts,
+                    // so it is identical while avoiding one tokenize call per overlap
+                    // sentence at every chunk boundary.
+                    let overlap = calculateOverlapSentences(
                         sentences: currentSentences,
                         tokenCounts: Array(
                             sentenceTokenCounts[
@@ -302,10 +327,8 @@ public struct TokenSplitter: SentenceChunker {
                         maxOverlapTokens: effectiveOverlap
                     )
 
-                    currentSentences = overlapSentences
-                    currentTokenCount = overlapSentences.reduce(0) { count, sent in
-                        count + (tokenizer.tokenize(text: sent).count)
-                    }
+                    currentSentences = overlap.sentences
+                    currentTokenCount = overlap.tokenCount
                 }
 
                 // Add sentence to current chunk
@@ -354,13 +377,18 @@ public struct TokenSplitter: SentenceChunker {
             return sentences
         }
 
-        /// Calculate which sentences from the previous chunk should be included in overlap
+        /// Calculate which sentences from the previous chunk should be included in overlap.
+        ///
+        /// Returns the overlap sentences alongside their combined token count. The
+        /// count is summed from the same cached per-sentence `tokenCounts`, so it is
+        /// identical to re-tokenizing the returned sentences — the caller uses it to
+        /// seed the next chunk's running count without another tokenize pass.
         private func calculateOverlapSentences(
             sentences: [String],
             tokenCounts: [Int],
             maxOverlapTokens: Int
-        ) -> [String] {
-            guard !sentences.isEmpty else { return [] }
+        ) -> (sentences: [String], tokenCount: Int) {
+            guard !sentences.isEmpty else { return ([], 0) }
 
             var overlapSentences: [String] = []
             var overlapTokenCount = 0
@@ -375,7 +403,7 @@ public struct TokenSplitter: SentenceChunker {
                 overlapTokenCount += sentenceTokens
             }
 
-            return overlapSentences
+            return (overlapSentences, overlapTokenCount)
         }
 
         /// Split a very long sentence at clause boundaries (commas, semicolons, etc.)
