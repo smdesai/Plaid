@@ -2,7 +2,7 @@
 
 **Fast, elegant semantic search powered by ColBERT embeddings and optimized indexing.**
 
-Plaid Swift is a native Swift implementation of the Plaid indexing and search system, bringing high-performance semantic search to iOS and macOS applications. Built on MLX for efficient tensor operations and CoreML for on-device embeddings, it enables powerful neural search capabilities without external dependencies.
+Plaid Swift brings high-performance semantic search to iOS and macOS applications. The vector engine is the Rust [`next-plaid`](https://github.com/smdesai/next-plaid) implementation, linked in as a prebuilt UniFFI XCFramework (`NextPlaidFFI.xcframework`); embedding and tokenization stay in Swift, running on-device via CoreML. This split keeps indexing and search fast and memory-bounded while the encoder runs on the Apple Neural Engine / GPU.
 
 ## Features
 
@@ -11,7 +11,7 @@ Plaid Swift is a native Swift implementation of the Plaid indexing and search sy
 - 📦 **Compact Indexes** - Product quantization with 1-8 bit compression
 - 🔄 **Intelligent Chunking** - Automatic handling of large documents with overlap
 - 🔍 **Embedding Retrieval** - Extract decompressed token embeddings from indexed documents
-- 💻 **Native Swift** - No Python or PyTorch dependencies
+- ⚙️ **Rust Vector Engine** - Indexing and search run in the `next-plaid` engine via a UniFFI XCFramework; no Python or PyTorch at runtime
 - 📱 **iOS & macOS** - Runs on-device with CoreML acceleration
 - 🎯 **Easy CLI** - Index and search from the command line
 - 🔧 **Flexible API** - Use as a library in your Swift projects
@@ -28,8 +28,8 @@ swift build
 
 Requires:
 - **Swift 5.9+**
-- **macOS 13.3+** or **iOS 17+**
-- MLX Swift (fetched automatically by SwiftPM)
+- **macOS 13.3+** or **iOS 17+** (Apple Silicon)
+- `NextPlaidFFI.xcframework` (the Rust engine) — vendored under `Frameworks/` and linked automatically by SwiftPM as a binary target; the Accelerate framework is linked for CPU math
 
 ---
 
@@ -85,6 +85,8 @@ let config = ColbertModel.Configuration(embeddingDimension: 64, ...)
 
 Index your documents with ColBERT embeddings:
 
+All indexing and search goes through a `SearchBackend`; the shipping implementation is `RustSearchBackend`, backed by the `next-plaid` engine. Embeddings are passed **raw** (unnormalized) as produced by the CoreML encoder — the backend normalizes each token row to unit L2 before crossing the FFI.
+
 ```swift
 import Plaid
 
@@ -97,17 +99,14 @@ let documents: [[[Float]]] = [
     // ... more documents
 ]
 
-// 2. Generate or provide centroids for quantization
-let centroids: [[Float]] = generateCentroids(embeddingDim: 128, nbits: 2)
-
-// 3. Create the index
-try Plaid.create(
+// 2. Create the index. The engine computes its own quantization
+//    centroids via k-means — no centroids need to be supplied.
+let backend = RustSearchBackend()
+try backend.create(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
-    device: "cpu",
     embeddingDim: 128,
     nbits: 2,                    // Compression: 2^nbits clusters
     embeddings: documents,
-    centroids: centroids,
     batchSize: 64,
     seed: 42
 )
@@ -133,13 +132,13 @@ let searchParams = SearchParameters(
 )
 
 // 3. Search
-let results = try Plaid.loadAndSearch(
+let results = try backend.loadAndSearch(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
-    device: "cpu",
     queries: queries,
     searchParameters: searchParams,
     showProgress: false,
-    preloadIndex: false
+    preloadIndex: false,
+    subset: nil                 // Optional per-query candidate restriction
 )
 
 // 4. Process results
@@ -159,7 +158,7 @@ Once documents are indexed, you can retrieve their full decompressed token-level
 // Retrieve embeddings for a specific document by its ID
 let documentId = 5  // Document IDs are assigned sequentially (0, 1, 2, ...)
 
-let embeddings = try Plaid.getDocumentEmbeddings(
+let embeddings = try backend.getDocumentEmbeddings(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
     documentId: documentId
 )
@@ -189,8 +188,8 @@ for (tokenIdx, tokenEmbedding) in embeddings.enumerated() {
 **Error handling:**
 ```swift
 do {
-    let embeddings = try Plaid.getDocumentEmbeddings(
-        indexPath: "/path/to/index",
+    let embeddings = try backend.getDocumentEmbeddings(
+        indexURL: URL(fileURLWithPath: "/path/to/index"),
         documentId: 999
     )
     print("Retrieved \(embeddings.count) token embeddings")
@@ -201,13 +200,18 @@ do {
 }
 ```
 
-**Path-based convenience API:**
+### Deleting Documents
+
+Remove documents by internal id. The engine compacts survivors, renumbering
+`new = old − count(deletedIds < old)`; `DeleteOutcome.deletedIdsSorted` gives the
+removed set so callers keeping an external id map can replay that transform.
+
 ```swift
-// Use string path instead of URL
-let embeddings = try Plaid.getDocumentEmbeddings(
-    indexPath: "/path/to/index",
-    documentId: 5
+let outcome = try backend.delete(
+    indexURL: URL(fileURLWithPath: "/path/to/index"),
+    subset: [1, 4, 9]
 )
+print("Removed ids: \(outcome.deletedIdsSorted)")
 ```
 
 ### Using ColBERT Embeddings
