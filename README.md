@@ -21,8 +21,8 @@ Plaid Swift brings high-performance semantic search to iOS and macOS application
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/plaid-swift.git
-cd plaid-swift
+git clone https://github.com/smdesai/Plaid.git
+cd Plaid
 swift build
 ```
 
@@ -282,27 +282,6 @@ let score = try colbert.similarity(query: queryEmbedding, document: docEmbedding
 print("Similarity: \(score)")
 ```
 
-### MLX Integration
-
-When using MLX arrays directly:
-
-```swift
-import MLX
-
-let mlxEmbeddings: [MLXArray] = [...]  // Your embeddings as MLX arrays
-let mlxCentroids = MLXArray(...)       // Centroids as MLX array
-
-try Plaid.create(
-    indexURL: indexURL,
-    device: "cpu",
-    embeddingDim: 128,
-    nbits: 2,
-    embeddings: mlxEmbeddings,     // MLXArray inputs
-    centroids: mlxCentroids,
-    batchSize: 64
-)
-```
-
 ---
 
 ## CLI Usage
@@ -318,7 +297,7 @@ Commands:
   demo         End-to-end demo: create index and search
   update       Add new documents to an existing index
   delete       Remove documents from an existing index
-  quickstart   Test with bundled fixtures
+  remap-test   Offline backend check (no model download): create → search → update → delete
   tokenize     Tokenize text with ColBERT tokenizer
   similarity   Compute similarity between query and document
 
@@ -542,7 +521,7 @@ PlaidCLI demo \
 - **Incremental**: No need to rebuild the entire index
 - **Automatic Encoding**: Documents are automatically encoded with ColBERT
 - **Large Documents**: Automatically chunks documents that exceed token limits
-- **Preserves Settings**: Uses the existing index's quantization settings (nbits, centroids)
+- **Preserves Settings**: Uses the existing index's quantization settings (nbits)
 
 ---
 
@@ -758,15 +737,17 @@ ColBERT score: 12.3456
 
 ---
 
-### `quickstart` Command
+### `remap-test` Command
 
-**Run built-in demo with test fixtures.**
+**Offline end-to-end check of the backend — no model download required.**
 
 ```bash
-PlaidCLI quickstart
+PlaidCLI remap-test
 ```
 
-Loads bundled test data and demonstrates index creation and search.
+Builds a small synthetic index, then exercises create → search → update →
+middle-delete → suffix-delete, asserting that the delete-renumber remap holds.
+Useful for verifying the Rust engine wiring without pulling a Core ML model.
 
 ---
 
@@ -1024,23 +1005,23 @@ PlaidCLI demo --query "..." --files docs/*.txt --model mxbai
 
 ## Index File Structure
 
-When you create an index, Plaid generates these files:
+When you create an index, the `next-plaid` engine writes these files (tensors as
+`.npy`):
 
 ```
 my_index/
 ├── metadata.json             # Index metadata
-├── plaid_index.json          # Index configuration
 ├── plan.json                 # Execution plan
-├── centroids.bin             # Quantization centroids
-├── bucket_cutoffs.bin        # Quantization thresholds
-├── bucket_weights.bin        # Quantization weights
-├── avg_residual.bin          # Average residuals
-├── ivf.bin                   # Inverted file index
-├── ivf_lengths.bin           # IVF partition sizes
-├── chunk_0.codes.bin         # Compressed codes
-├── chunk_0.residuals.bin     # Compressed residuals
-├── chunk_0.metadata.json     # Chunk metadata
-└── doclens.0.json           # Document lengths
+├── centroids.npy             # Quantization centroids
+├── bucket_cutoffs.npy        # Quantization thresholds
+├── bucket_weights.npy        # Quantization weights
+├── avg_residual.npy          # Average residuals
+├── ivf.npy                   # Inverted file index
+├── ivf_lengths.npy           # IVF partition sizes
+├── 0.codes.npy               # Compressed codes (chunk 0)
+├── 0.residuals.npy           # Compressed residuals (chunk 0)
+├── 0.metadata.json           # Chunk metadata
+└── doclens.0.json            # Document lengths
 ```
 
 ---
@@ -1067,8 +1048,11 @@ my_index/
 
 4. **Preloading**: Load index once for multiple searches
    ```swift
-   Plaid.loadAndSearch(..., preloadIndex: true)  // Cache in memory
+   backend.loadAndSearch(..., preloadIndex: true)  // Cache in memory
    ```
+   `RustSearchBackend` also caches live index handles per path, so repeated
+   `loadAndSearch`/`update`/`delete` calls against the same index reuse the
+   open handle.
 
 ---
 
@@ -1081,8 +1065,9 @@ my_index/
 
 ### Dependencies
 
-- [MLX Swift](https://github.com/ml-explore/mlx-swift) - Tensor operations
-- CoreML - On-device inference
+- `NextPlaidFFI.xcframework` - the Rust [`next-plaid`](https://github.com/smdesai/next-plaid) vector engine, exposed via UniFFI and linked as a SwiftPM binary target
+- Accelerate - CPU vector/matrix math
+- CoreML - On-device embedding inference
 - Foundation - Core Swift functionality
 
 All dependencies are managed by Swift Package Manager.
@@ -1093,8 +1078,8 @@ All dependencies are managed by Swift Package Manager.
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/plaid-swift.git
-cd plaid-swift
+git clone https://github.com/smdesai/Plaid.git
+cd Plaid
 
 # Build
 swift build
@@ -1110,7 +1095,7 @@ swift build -c release
 
 ## License
 
-[Your License Here]
+Apache 2.0
 
 ---
 
@@ -1129,4 +1114,4 @@ If you use Plaid Swift in your research, please cite:
 
 ---
 
-**Built with ❤️ using Swift and MLX**
+**Built with ❤️ using Swift and Rust**
