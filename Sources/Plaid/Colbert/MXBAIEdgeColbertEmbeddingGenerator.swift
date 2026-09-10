@@ -61,7 +61,7 @@ public final class MXBAIEdgeColbertEmbeddingGenerator: ColbertEmbeddingGenerator
         skiplistWords: [String]? = nil
     ) throws {
         let modelURL = try Self.resolveModelURL(modelURL)
-        configuration.computeUnits = .all
+        configuration.computeUnits = .cpuAndNeuralEngine
         self.model = try MLModel(contentsOf: modelURL, configuration: configuration)
         self.tokenizer = tokenizer
         self.maxSequenceLength = tokenizer.maxSequenceLength
