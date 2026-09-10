@@ -636,6 +636,12 @@ public enum Plaid {
             torchPath: torchPath
         )
     }
+
+    /// Number of documents currently in the index (read-only). Used by the
+    /// legacy `SearchBackend` adapter to report the ids assigned on append.
+    public static func documentCount(indexURL: URL) throws -> Int {
+        try loadSummary(from: indexURL).docLengths.count
+    }
 }
 
 extension Plaid {

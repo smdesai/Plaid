@@ -100,19 +100,19 @@ class ModelPreferences: ObservableObject {
     private static let selectedModelKey = "selectedModel"
 
     init() {
-        // Load persisted model preference or default to LFM2
+        // Load persisted model preference or default to MXBAI-Edge
         if let savedRawValue = UserDefaults.standard.string(
             forKey: ModelPreferences.selectedModelKey),
             let savedModel = ModelType(rawValue: savedRawValue)
         {
             self.selectedModel = savedModel
         } else {
-            self.selectedModel = .lfm2
+            self.selectedModel = .mxbaiEdge
         }
     }
 
     /// Reset to default model
     func reset() {
-        selectedModel = .lfm2
+        selectedModel = .mxbaiEdge
     }
 }

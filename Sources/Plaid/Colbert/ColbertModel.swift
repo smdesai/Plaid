@@ -155,31 +155,59 @@ public struct ColbertModel {
 
         print("✅ Document chunked: \(textChunks.count) chunk(s) created")
 
-        // Process each chunk and preserve its text
+        // Encode chunks in batches for CoreML throughput. Encoding one chunk per
+        // model call (as before) is the dominant cost when indexing large
+        // documents — thousands of serial predictions. We batch the *text*
+        // chunks (default 32 per model pass) via the generator's batch API,
+        // mapping each batch result back to its source chunk so the per-chunk
+        // text and boundaries `encodeDocument` promises are preserved.
         var documentChunks: [DocumentChunk] = []
         documentChunks.reserveCapacity(textChunks.count)
 
-        for (index, chunkText) in textChunks.enumerated() {
-            guard !chunkText.isEmpty else { continue }
+        // Pair each non-empty chunk with its original index so results map back
+        // and skipped-empty chunks don't shift `chunkIndex`.
+        let indexedChunks = textChunks.enumerated().filter { !$0.element.isEmpty }
 
-            let generated = try generator.generateEmbeddings(
-                for: chunkText,
+        let batchSize = max(config.batchSize, 1)
+        let totalBatches = (indexedChunks.count + batchSize - 1) / batchSize
+        var lastReportedPercent = 0
+
+        for batchIndex in 0 ..< totalBatches {
+            let startIdx = batchIndex * batchSize
+            let endIdx = min(startIdx + batchSize, indexedChunks.count)
+            let batch = Array(indexedChunks[startIdx ..< endIdx])
+
+            let generatedBatch = try generator.generateEmbeddingsBatch(
+                for: batch.map { $0.element },
                 isQuery: false,
                 maxLength: config.documentLength
             )
 
-            let chunkEmbeddings = try processBatch(
-                generated.embeddings,
-                attentionMask: generated.attentionMask,
-                isQuery: false
-            )
+            for (pair, generated) in zip(batch, generatedBatch) {
+                let chunkEmbeddings = try processBatch(
+                    generated.embeddings,
+                    attentionMask: generated.attentionMask,
+                    isQuery: false
+                )
+                documentChunks.append(
+                    DocumentChunk(
+                        chunkIndex: pair.offset,
+                        text: pair.element,
+                        embeddings: chunkEmbeddings
+                    )
+                )
+            }
 
-            let chunk = DocumentChunk(
-                chunkIndex: index,
-                text: chunkText,
-                embeddings: chunkEmbeddings
-            )
-            documentChunks.append(chunk)
+            // Progress feedback so large documents don't look frozen mid-encode.
+            if totalBatches > 1 {
+                let percentComplete = ((batchIndex + 1) * 100) / totalBatches
+                if percentComplete >= lastReportedPercent + 10 {
+                    print(
+                        "   Encoding progress: \(percentComplete)% (\(endIdx)/\(indexedChunks.count) chunks)"
+                    )
+                    lastReportedPercent = percentComplete
+                }
+            }
         }
 
         guard !documentChunks.isEmpty else {

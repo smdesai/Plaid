@@ -26,9 +26,15 @@ class SearchEngine: ObservableObject {
     private var embeddingDim: Int = 128  // Will be set based on model
     private let nbits = 2
 
+    /// Vector-search engine seam. Defaults to the Rust `next-plaid` engine (via
+    /// UniFFI); injectable so tests or a legacy fallback can swap it out.
+    private let backend: SearchBackend
+
     private static let currentModelKey = "currentModel"
 
-    init() {
+    init(backend: SearchBackend = RustSearchBackend()) {
+        self.backend = backend
+
         // Set up index directory in Application Support
         let appSupport = FileManager.default.urls(
             for: .documentDirectory,
@@ -60,10 +66,14 @@ class SearchEngine: ObservableObject {
         let generator: ColbertEmbeddingGenerator
         switch model {
         case .lfm2:
-            print("📦 Initializing LFM2 embedding generator (downloads the Core ML model on first use)...")
+            print(
+                "📦 Initializing LFM2 embedding generator (downloads the Core ML model on first use)..."
+            )
             generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         case .mxbaiEdge:
-            print("📦 Initializing MXBAI-Edge embedding generator (downloads the Core ML model on first use)...")
+            print(
+                "📦 Initializing MXBAI-Edge embedding generator (downloads the Core ML model on first use)..."
+            )
             generator = try await MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer: tokenizer)
         }
 
@@ -106,14 +116,14 @@ class SearchEngine: ObservableObject {
 
     /// Initialize with saved model or default
     func initialize() async throws {
-        // Load saved model preference or default to LFM2
+        // Load saved model preference or default to MXBAI-Edge
         let model: ModelType
         if let savedRawValue = UserDefaults.standard.string(forKey: SearchEngine.currentModelKey),
             let savedModel = ModelType(rawValue: savedRawValue)
         {
             model = savedModel
         } else {
-            model = .lfm2
+            model = .mxbaiEdge
         }
 
         try await initialize(with: model)
@@ -142,17 +152,69 @@ class SearchEngine: ObservableObject {
             errorMessage = nil
         }
 
-        // Each chunk gets its own plaidDocId, stored as separate embedding array
-        var allChunkEmbeddings: [[[Float]]] = []
-        var chunksForObjectBox:
+        // Streaming/batched indexing. Rather than accumulate every chunk's
+        // embeddings in RAM and build the index in one `create` (which peaks at
+        // the whole corpus — hundreds of MB for large inputs), we encode into a
+        // bounded batch, flush it to the engine, and release it. The first flush
+        // `create`s the index; later flushes `update` (append).
+        //
+        // Peak memory is bounded to ~one batch on the Swift side. On the Rust
+        // side, while the index still has ≤ `start_from_scratch` (999) chunks an
+        // `update` rebuilds from the retained raw embeddings — but 999 is a
+        // constant, so that window is O(999²) total, not O(N²), and once the
+        // corpus grows past it the engine switches to incremental
+        // buffer/centroid-expansion appends. Net: peak ≈ one batch + the ≤999
+        // rebuild window, independent of corpus size.
+        let batchChunkThreshold = 1024
+
+        var batchEmbeddings: [[[Float]]] = []
+        var batchMetadata:
             [(
                 plaidDocId: Int, documentName: String, chunkText: String, chunkIndex: Int,
                 filePath: String?
             )] = []
         var documentMetadata: [Int: DocumentMetadata] = [:]
         var currentPlaidDocId = 0
+        var totalChunks = 0
+        var totalEmbeddings = 0
+        var didCreate = false
 
-        // Encode each document using chunk-aware encoding
+        // Flush the accumulated batch to the engine + ObjectBox, then release it.
+        func flushBatch() async throws {
+            guard !batchEmbeddings.isEmpty else { return }
+
+            if !didCreate {
+                // First flush builds the index. The Rust engine computes its own
+                // k-means and ignores `centroids`; the legacy engine consumes
+                // them. Passing them (from this first batch) keeps both correct.
+                print("💾 Creating Plaid index (first batch of \(batchEmbeddings.count) chunks)...")
+                let centroids = try generateCentroids(from: batchEmbeddings)
+                try backend.create(
+                    indexURL: indexURL,
+                    embeddingDim: embeddingDim,
+                    nbits: nbits,
+                    embeddings: batchEmbeddings,
+                    centroids: centroids,
+                    batchSize: 64,
+                    seed: 42
+                )
+                didCreate = true
+            } else {
+                print("➕ Appending \(batchEmbeddings.count) chunks to Plaid index...")
+                _ = try backend.update(
+                    indexURL: indexURL,
+                    embeddings: batchEmbeddings,
+                    batchSize: 64
+                )
+            }
+
+            try await metadataProvider.registerDocuments(batchMetadata, indexName: indexName)
+
+            batchEmbeddings.removeAll(keepingCapacity: true)
+            batchMetadata.removeAll(keepingCapacity: true)
+        }
+
+        // Encode each document using chunk-aware encoding, flushing as batches fill
         for (docIndex, doc) in documents.enumerated() {
             await MainActor.run {
                 currentDocument = doc.filename
@@ -168,13 +230,13 @@ class SearchEngine: ObservableObject {
                 "  ✅ \(chunkedResult.chunks.count) chunks, \(chunkedResult.totalEmbeddingCount) total embeddings"
             )
 
-            // Each chunk becomes a separate entry in Plaid index
+            // Each chunk becomes a separate entry in Plaid index. Its plaidDocId
+            // is the engine's internal id: `create` assigns 0…, and each `update`
+            // appends contiguously after, so this running counter stays in lockstep.
             for chunk in chunkedResult.chunks {
-                // Store chunk embeddings for Plaid
-                allChunkEmbeddings.append(chunk.embeddings)
+                batchEmbeddings.append(chunk.embeddings)
 
-                // Store chunk metadata for ObjectBox
-                chunksForObjectBox.append(
+                batchMetadata.append(
                     (
                         plaidDocId: currentPlaidDocId,
                         documentName: doc.filename,
@@ -183,7 +245,6 @@ class SearchEngine: ObservableObject {
                         filePath: nil
                     ))
 
-                // Track in document metadata
                 documentMetadata[currentPlaidDocId] = DocumentMetadata(
                     id: currentPlaidDocId,
                     filename: doc.filename,
@@ -195,36 +256,30 @@ class SearchEngine: ObservableObject {
                 )
 
                 currentPlaidDocId += 1
+                totalChunks += 1
+                totalEmbeddings += chunk.embeddings.count
+
+                if batchEmbeddings.count >= batchChunkThreshold {
+                    try await flushBatch()
+                }
             }
         }
 
-        // Generate centroids from all chunk embeddings
-        print("🎯 Generating centroids...")
-        let centroids = try generateCentroids(from: allChunkEmbeddings)
-        print("  ✅ Generated \(centroids.count) centroids")
+        // Flush the trailing partial batch (also handles small corpora, where
+        // this is the only flush and behaves exactly like the old single create).
+        try await flushBatch()
 
-        // Create Plaid index - each chunk is a separate "document"
-        print("💾 Creating Plaid index with \(allChunkEmbeddings.count) chunks...")
-        try Plaid.create(
-            indexURL: indexURL,
-            embeddingDim: embeddingDim,
-            nbits: nbits,
-            embeddings: allChunkEmbeddings,
-            centroids: centroids,
-            batchSize: 64
-        )
-
-        // Store chunk metadata in ObjectBox
-        print("📦 Storing \(chunksForObjectBox.count) chunk metadata entries in ObjectBox...")
-        try await metadataProvider.registerDocuments(chunksForObjectBox, indexName: indexName)
+        guard didCreate else {
+            await MainActor.run { isIndexing = false }
+            throw SearchEngineError.noEmbeddings
+        }
 
         // Save index state
-        let totalEmbeddings = allChunkEmbeddings.reduce(0) { $0 + $1.count }
         self.indexState = IndexState(
             documents: documentMetadata,
             createdAt: Date(),
             lastModified: Date(),
-            totalDocuments: allChunkEmbeddings.count,
+            totalDocuments: totalChunks,
             totalEmbeddings: totalEmbeddings
         )
         try saveIndexState()
@@ -237,7 +292,7 @@ class SearchEngine: ObservableObject {
 
         print("✅ Index created successfully!")
         print(
-            "   📊 \(documents.count) documents → \(allChunkEmbeddings.count) chunks → \(totalEmbeddings) embeddings"
+            "   📊 \(documents.count) documents → \(totalChunks) chunks → \(totalEmbeddings) embeddings"
         )
     }
 
@@ -288,12 +343,13 @@ class SearchEngine: ObservableObject {
             logTiming: false
         )
 
-        let results = try Plaid.loadAndSearch(
+        let results = try backend.loadAndSearch(
             indexURL: indexURL,
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
-            preloadIndex: true
+            preloadIndex: true,
+            subset: nil
         )
 
         let searchTime =

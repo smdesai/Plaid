@@ -15,6 +15,22 @@ enum PlaidCLI {
         "fixtures", isDirectory: true)
     private static let defaultTokenizerModelId = "LiquidAI/LFM2-ColBERT-350M"
 
+    // MARK: - Backend Selection
+
+    /// The vector-engine backend behind every index operation. Defaults to the
+    /// Rust `next-plaid` engine; set `PLAID_BACKEND=legacy` to use the pure-Swift
+    /// MLX engine (the parity oracle). Both conform to `SearchBackend`, so the
+    /// commands below are engine-agnostic.
+    private static func makeBackend() -> SearchBackend {
+        switch ProcessInfo.processInfo.environment["PLAID_BACKEND"]?.lowercased() {
+        case "legacy", "swift", "mlx":
+            print("🐢 Backend: legacy pure-Swift Plaid engine (PLAID_BACKEND=legacy)")
+            return LegacySearchBackend()
+        default:
+            return RustSearchBackend()
+        }
+    }
+
     // MARK: - Model Selection
 
     enum CLIModel: String, CaseIterable {
@@ -90,6 +106,8 @@ enum PlaidCLI {
             try await runUserUpdate(arguments: commandArgs)
         case "update-test":
             try runUpdateTest()
+        case "remap-test":
+            try runRemapTest()
         case "delete":
             try runUserDelete(arguments: commandArgs)
         case "tokenize":
@@ -131,6 +149,10 @@ enum PlaidCLI {
                              delete -i ~/.plaid/my_index -f to_delete.txt
 
               quickstart   Create an index, execute a search, and print the top results (test data).
+
+              remap-test   Offline end-to-end check of the active backend (no model download):
+                           create → search → update → middle-delete → suffix-delete, asserting the
+                           delete-renumber remap. Set PLAID_BACKEND=legacy to run it on the Swift engine.
 
               tokenize     Tokenize a string using a pretrained tokenizer and print tokens/ids.
                            Usage: tokenize [--query|--doc] [--model MODEL | --pretrained MODEL_ID] TEXT
@@ -333,6 +355,120 @@ enum PlaidCLI {
 
         print("\nResults after update (additional \(updateCount) docs):\n")
         printResults(afterUpdate)
+    }
+
+    /// Offline end-to-end exercise of the active `SearchBackend`: create, search,
+    /// append, then a middle delete and a suffix delete — asserting the engine's
+    /// delete-renumber remap. Uses one-hot vectors so a query along an axis maps
+    /// to a known document id; needs no model download or network.
+    private static func runRemapTest() throws {
+        let dim = 16
+        // nbits must divide 8 (Rust). nbits=4 → 16 one-hot centroids, one per dim,
+        // so the legacy engine quantizes every doc axis (0…6) losslessly (the Rust
+        // engine computes its own k-means and ignores the supplied centroids).
+        let nbits = 4
+
+        func oneHot(_ axis: Int, tokens: Int = 4) -> [[Float]] {
+            var row = [Float](repeating: 0, count: dim)
+            row[axis] = 1
+            return Array(repeating: row, count: tokens)
+        }
+        func query(axis: Int) -> [[[Float]]] { [oneHot(axis, tokens: 1)] }
+        let searchParams = SearchParameters(
+            batchSize: 2000, nFullScores: 4096, topK: 1, nIvfProbe: 1024)
+
+        var failures = 0
+        func expect(_ got: Int?, _ want: Int, _ what: String) {
+            if got == want {
+                print("  ✅ \(what): id \(want)")
+            } else {
+                print("  ❌ \(what): expected \(want), got \(String(describing: got))")
+                failures += 1
+            }
+        }
+
+        let backend = makeBackend()
+        let indexURL = defaultIndexURL(named: "remap_test")
+        try resetIndexDirectory(at: indexURL)
+
+        func topId(axis: Int) throws -> Int? {
+            try backend.loadAndSearch(
+                indexURL: indexURL, queries: query(axis: axis),
+                searchParameters: searchParams, showProgress: false,
+                preloadIndex: false, subset: nil
+            ).first?.passageIds.first
+        }
+
+        print("╔══════════════════════════════════════════════════════════════════════╗")
+        print("║  Backend Remap Test (create → update → middle/suffix delete)         ║")
+        print("╚══════════════════════════════════════════════════════════════════════╝\n")
+        print("📂 Index: \(indexURL.path)\n")
+
+        // 1. Create five docs along axes 0…4 (id == axis).
+        let docs = (0 ..< 5).map { oneHot($0) }
+        // Legacy engine needs centroids; the Rust engine ignores them.
+        let centroids = (0 ..< (1 << nbits)).map { axis -> [Float] in
+            var row = [Float](repeating: 0, count: dim)
+            row[axis] = 1
+            return row
+        }
+        try backend.create(
+            indexURL: indexURL, embeddingDim: dim, nbits: nbits,
+            embeddings: docs, centroids: centroids, batchSize: 64, seed: 42)
+        print("① Created 5 docs along axes 0…4:")
+        for axis in 0 ..< 5 { expect(try topId(axis: axis), axis, "axis \(axis)") }
+
+        // 2. Append docs along axes 5 and 6 → ids 5, 6 (existing ids unchanged).
+        let newIds = try backend.update(
+            indexURL: indexURL, embeddings: [oneHot(5), oneHot(6)], batchSize: 64)
+        print("\n② Appended axes 5,6 → new ids \(newIds):")
+        if newIds != [5, 6] {
+            print("  ❌ expected new ids [5, 6], got \(newIds)")
+            failures += 1
+        } else {
+            print("  ✅ new ids [5, 6]")
+        }
+        expect(try topId(axis: 6), 6, "axis 6")
+
+        // 3. Middle delete: remove id 2 (axis-2 doc). Survivors above shift down 1.
+        let mid = try backend.delete(indexURL: indexURL, subset: [2])
+        print("\n③ Middle-deleted id 2 → removed \(mid.deletedIdsSorted):")
+        if mid.deletedIdsSorted != [2] {
+            print("  ❌ expected removed [2]")
+            failures += 1
+        } else {
+            print("  ✅ removed [2]")
+        }
+        print("   Expect renumber: axis3 3→2, axis4 4→3, axis5 5→4, axis6 6→5")
+        expect(try topId(axis: 3), 2, "axis 3 after middle delete")
+        expect(try topId(axis: 4), 3, "axis 4 after middle delete")
+        expect(try topId(axis: 6), 5, "axis 6 after middle delete")
+
+        // 4. Suffix delete: remove the current last id (5 = axis-6 doc). Ids stable.
+        let suffix = try backend.delete(indexURL: indexURL, subset: [5])
+        print("\n④ Suffix-deleted id 5 → removed \(suffix.deletedIdsSorted):")
+        if suffix.deletedIdsSorted != [5] {
+            print("  ❌ expected removed [5]")
+            failures += 1
+        } else {
+            print("  ✅ removed [5]")
+        }
+        print("   Expect ids unchanged for survivors below 5:")
+        expect(try topId(axis: 3), 2, "axis 3 after suffix delete (stable)")
+        expect(try topId(axis: 5), 4, "axis 5 after suffix delete (stable)")
+
+        try? FileManager.default.removeItem(at: indexURL)
+
+        print("")
+        if failures == 0 {
+            print("✅ remap-test passed — create/update/delete + renumber all correct.")
+        } else {
+            print("❌ remap-test FAILED with \(failures) mismatch(es).")
+            fflush(stdout)  // flush before the abort so the report above is visible
+            throw NSError(
+                domain: "PlaidCLI", code: 99,
+                userInfo: [NSLocalizedDescriptionKey: "remap-test failed (\(failures) mismatches)"])
+        }
     }
 
     private static func runTokenizer(arguments: [String]) async throws {
@@ -733,13 +869,15 @@ enum PlaidCLI {
         print("  nbits: \(nbits)")
         print("  Centroids: \(centroids.count)")
 
-        try Plaid.create(
+        let backend = makeBackend()
+        try backend.create(
             indexURL: indexURL,
             embeddingDim: model.embeddingDimension,
             nbits: nbits,
             embeddings: documentEmbeddings,
             centroids: centroids,
-            batchSize: 64
+            batchSize: 64,
+            seed: 42
         )
         print("✅ Index created\n")
 
@@ -760,12 +898,13 @@ enum PlaidCLI {
             logTiming: true
         )
 
-        let results = try Plaid.loadAndSearch(
+        let results = try backend.loadAndSearch(
             indexURL: indexURL,
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
-            preloadIndex: false
+            preloadIndex: false,
+            subset: nil
         )
         print("✅ Search complete\n")
 
@@ -943,12 +1082,14 @@ enum PlaidCLI {
             logTiming: true
         )
 
-        let results = try Plaid.loadAndSearch(
+        let backend = makeBackend()
+        let results = try backend.loadAndSearch(
             indexURL: indexURL,
             queries: [queryEmbedding],
             searchParameters: params,
             showProgress: false,
-            preloadIndex: false
+            preloadIndex: false,
+            subset: nil
         )
         print("✅ Search complete\n")
 
@@ -1363,7 +1504,7 @@ enum PlaidCLI {
         // Update index
         print("📦 Updating index...")
         do {
-            try Plaid.update(
+            let newIds = try makeBackend().update(
                 indexURL: indexURL,
                 embeddings: allEmbeddings,
                 batchSize: batchSize
@@ -1371,6 +1512,9 @@ enum PlaidCLI {
             print("✅ Index updated successfully!")
             print("\n💾 Updated index: \(indexPath)")
             print("   Added \(allEmbeddings.count) document(s)")
+            if !newIds.isEmpty {
+                print("   Assigned document IDs: \(newIds.first!)…\(newIds.last!)")
+            }
 
         } catch {
             print("❌ Error updating index: \(error.localizedDescription)")
@@ -1510,13 +1654,22 @@ enum PlaidCLI {
         // Perform deletion
         print("🗑️  Deleting documents...")
         do {
-            try Plaid.delete(
+            let outcome = try makeBackend().delete(
                 indexURL: indexURL,
                 subset: uniqueIds
             )
             print("✅ Deletion complete!")
             print("\n💾 Updated index: \(indexPath)")
-            print("   Removed \(uniqueIds.count) document(s)")
+            print("   Removed \(outcome.deletedIdsSorted.count) document(s)")
+            // The engine compacts survivors: any id above a deleted id shifts down
+            // by the count of deleted ids below it. Callers with an external id map
+            // must replay this using deletedIdsSorted.
+            if !outcome.deletedIdsSorted.isEmpty {
+                print("   Removed internal IDs (sorted): \(outcome.deletedIdsSorted)")
+                print(
+                    "   ⚠️  Survivors were renumbered: new = old − (count of removed IDs below old)."
+                )
+            }
 
         } catch {
             print("❌ Error deleting documents: \(error.localizedDescription)")

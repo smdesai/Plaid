@@ -10,8 +10,8 @@ struct SettingsView: View {
 
     init(searchEngine: SearchEngine) {
         self.searchEngine = searchEngine
-        // Initialize with current model or default to LFM2
-        _selectedModel = State(initialValue: searchEngine.currentModel ?? .lfm2)
+        // Initialize with current model or default to MXBAI-Edge
+        _selectedModel = State(initialValue: searchEngine.currentModel ?? .mxbaiEdge)
     }
 
     var body: some View {
