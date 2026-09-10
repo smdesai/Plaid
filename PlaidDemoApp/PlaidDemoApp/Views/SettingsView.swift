@@ -7,11 +7,15 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var showModelChangeWarning = false
     @State private var isDeleting = false
+    @AppStorage(SearchEngine.encodeBatchSizeKey) private var encodeBatchSize: Int =
+        SearchEngine.defaultEncodeBatchSize
+    @AppStorage(SearchEngine.resultCountKey) private var resultCount: Int =
+        SearchEngine.defaultResultCount
 
     init(searchEngine: SearchEngine) {
         self.searchEngine = searchEngine
-        // Initialize with current model or default to LFM2
-        _selectedModel = State(initialValue: searchEngine.currentModel ?? .lfm2)
+        // Initialize with current model or default to MXBAI-Edge
+        _selectedModel = State(initialValue: searchEngine.currentModel ?? .mxbaiEdge)
     }
 
     var body: some View {
@@ -99,6 +103,74 @@ struct SettingsView: View {
                             .background(Color.orange.opacity(0.1))
                             .cornerRadius(12)
                         }
+                    }
+
+                    // Indexing Section (encode throughput tuning)
+                    VStack(alignment: .leading, spacing: 16) {
+                        sectionHeader(title: "Indexing", icon: "speedometer")
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "square.stack.3d.up")
+                                    .font(.body)
+                                    .foregroundColor(.indigo)
+                                    .frame(width: 28)
+
+                                Text("Encode batch size")
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+
+                            Picker("Encode batch size", selection: $encodeBatchSize) {
+                                ForEach(SearchEngine.encodeBatchSizeOptions, id: \.self) { size in
+                                    Text("\(size)").tag(size)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(
+                                "Chunks encoded per Core ML call. Higher can improve ANE/GPU utilization but raises peak memory. Applies on the next index."
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(12)
+                    }
+
+                    // Search Section (result count)
+                    VStack(alignment: .leading, spacing: 16) {
+                        sectionHeader(title: "Search", icon: "magnifyingglass")
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "list.number")
+                                    .font(.body)
+                                    .foregroundColor(.teal)
+                                    .frame(width: 28)
+
+                                Text("Results per search")
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+
+                            Picker("Results per search", selection: $resultCount) {
+                                ForEach(SearchEngine.resultCountOptions, id: \.self) { count in
+                                    Text("\(count)").tag(count)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(
+                                "How many top matches to show. Applies to the next search."
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(12)
                     }
 
                     // Danger Zone Section

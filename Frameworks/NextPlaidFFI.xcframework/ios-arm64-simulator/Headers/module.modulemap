@@ -1,0 +1,4 @@
+module next_plaid_ffiFFI {
+    header "next_plaid_ffiFFI.h"
+    export *
+}

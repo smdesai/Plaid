@@ -59,8 +59,8 @@ public struct ChunkedDocumentEmbeddings: Sendable {
 ///
 /// This type encapsulates batching, normalization, padding behaviour and
 /// similarity scoring using a pluggable embedding generator.
-public struct ColbertModel {
-    public struct Configuration {
+public struct ColbertModel: Sendable {
+    public struct Configuration: Sendable {
         public var batchSize: Int
         public var embeddingDimension: Int
         public var queryLength: Int
@@ -155,31 +155,128 @@ public struct ColbertModel {
 
         print("✅ Document chunked: \(textChunks.count) chunk(s) created")
 
-        // Process each chunk and preserve its text
+        // Encode chunks in batches for CoreML throughput. Encoding one chunk per
+        // model call (as before) is the dominant cost when indexing large
+        // documents — thousands of serial predictions. We batch the *text*
+        // chunks (default 32 per model pass) via the generator's batch API,
+        // mapping each batch result back to its source chunk so the per-chunk
+        // text and boundaries `encodeDocument` promises are preserved.
         var documentChunks: [DocumentChunk] = []
         documentChunks.reserveCapacity(textChunks.count)
 
-        for (index, chunkText) in textChunks.enumerated() {
-            guard !chunkText.isEmpty else { continue }
+        // Pair each non-empty chunk with its original index so results map back
+        // and skipped-empty chunks don't shift `chunkIndex`.
+        let indexedChunks = textChunks.enumerated().filter { !$0.element.isEmpty }
 
-            let generated = try generator.generateEmbeddings(
-                for: chunkText,
-                isQuery: false,
-                maxLength: config.documentLength
-            )
+        let batchSize = max(config.batchSize, 1)
+        let totalBatches = (indexedChunks.count + batchSize - 1) / batchSize
 
-            let chunkEmbeddings = try processBatch(
-                generated.embeddings,
-                attentionMask: generated.attentionMask,
-                isQuery: false
-            )
+        // Slice chunks into batches up front so the encode loop can look ahead
+        // and prepare the next batch while the current one is on the GPU.
+        var batches: [[(offset: Int, element: String)]] = []
+        batches.reserveCapacity(totalBatches)
+        for batchIndex in 0 ..< totalBatches {
+            let startIdx = batchIndex * batchSize
+            let endIdx = min(startIdx + batchSize, indexedChunks.count)
+            batches.append(Array(indexedChunks[startIdx ..< endIdx]))
+        }
 
-            let chunk = DocumentChunk(
-                chunkIndex: index,
-                text: chunkText,
-                embeddings: chunkEmbeddings
-            )
-            documentChunks.append(chunk)
+        var lastReportedPercent = 0
+
+        // Normalize a batch's raw embeddings and map each result back to its
+        // source chunk (preserving `chunkIndex`). Runs on the calling thread only.
+        func appendResults(
+            _ batch: [(offset: Int, element: String)],
+            _ generatedBatch: [ColbertEmbeddingBatch]
+        ) throws {
+            for (pair, generated) in zip(batch, generatedBatch) {
+                let chunkEmbeddings = try processBatch(
+                    generated.embeddings,
+                    attentionMask: generated.attentionMask,
+                    isQuery: false
+                )
+                documentChunks.append(
+                    DocumentChunk(
+                        chunkIndex: pair.offset,
+                        text: pair.element,
+                        embeddings: chunkEmbeddings
+                    )
+                )
+            }
+        }
+
+        // Progress feedback so large documents don't look frozen mid-encode.
+        func reportProgress(_ batchIndex: Int) {
+            guard totalBatches > 1 else { return }
+            let endIdx = min((batchIndex + 1) * batchSize, indexedChunks.count)
+            let percentComplete = ((batchIndex + 1) * 100) / totalBatches
+            if percentComplete >= lastReportedPercent + 10 {
+                print(
+                    "   Encoding progress: \(percentComplete)% (\(endIdx)/\(indexedChunks.count) chunks)"
+                )
+                lastReportedPercent = percentComplete
+            }
+        }
+
+        if totalBatches <= 1 {
+            // Single batch: nothing to overlap, take the direct path.
+            for batchIndex in 0 ..< totalBatches {
+                let batch = batches[batchIndex]
+                let generatedBatch = try generator.generateEmbeddingsBatch(
+                    for: batch.map { $0.element },
+                    isQuery: false,
+                    maxLength: config.documentLength
+                )
+                try appendResults(batch, generatedBatch)
+                reportProgress(batchIndex)
+            }
+        } else {
+            // Multi-batch: overlap the CPU-bound input prep (tokenize + pack) of
+            // the *next* batch with the GPU-bound inference of the *current* one.
+            // A device trace showed the GPU idle ~47% of encode wall-clock waiting
+            // on this serial prep. Prep runs on a serial background queue, so the
+            // (non-reentrant) tokenizer is still only ever touched by one thread at
+            // a time and the main thread never tokenizes — outputs and ordering are
+            // identical, only the scheduling changes. At most two batches are in
+            // flight, so peak memory stays bounded.
+            let prepQueue = DispatchQueue(label: "com.plaid.colbert.prepare", qos: .userInitiated)
+            let generator = self.generator
+            let maxLength = config.documentLength
+
+            final class PrepBox: @unchecked Sendable {
+                var result: Result<PreparedColbertBatch, Error>?
+                let ready = DispatchSemaphore(value: 0)
+            }
+            func launchPrepare(_ batch: [(offset: Int, element: String)]) -> PrepBox {
+                let box = PrepBox()
+                let sentences = batch.map { $0.element }
+                prepQueue.async {
+                    box.result = Result {
+                        try generator.prepareBatch(
+                            for: sentences, isQuery: false, maxLength: maxLength)
+                    }
+                    box.ready.signal()
+                }
+                return box
+            }
+
+            var currentBox = launchPrepare(batches[0])
+            for batchIndex in 0 ..< batches.count {
+                // Kick off prep for the next batch before running this one so the
+                // prep overlaps this batch's inference.
+                let nextBox: PrepBox? =
+                    (batchIndex + 1 < batches.count)
+                    ? launchPrepare(batches[batchIndex + 1]) : nil
+
+                currentBox.ready.wait()
+                let prepared = try currentBox.result!.get()
+                let generatedBatch = try generator.runPreparedBatch(prepared)
+
+                try appendResults(batches[batchIndex], generatedBatch)
+                reportProgress(batchIndex)
+
+                if let nextBox { currentBox = nextBox }
+            }
         }
 
         guard !documentChunks.isEmpty else {

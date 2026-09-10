@@ -54,7 +54,7 @@ struct DocumentMetadata: Codable {
 }
 
 /// Represents a document before indexing
-struct Document {
+struct Document: Sendable {
     let filename: String
     let text: String
 }

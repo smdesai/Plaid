@@ -4,14 +4,26 @@ import Plaid
 
 // MARK: - ObjectBox Entity
 
-/// ObjectBox entity for storing Plaid document metadata
-/// Maps plaidDocId to document name and text content
+/// ObjectBox entity for storing Plaid document metadata.
+///
+/// Maps `plaidDocId` (the engine's internal passage id, i.e. `QueryResult.passageId`)
+/// to the document name and chunk text — the bridge between search results and
+/// human-readable metadata.
+///
+/// The persistence bindings (entity model, `Property` accessors, and the
+/// `Store(directoryPath:)` convenience initializer) are produced by the ObjectBox
+/// code generator into `generated/EntityInfo-PlaidDemoApp.generated.swift`. After
+/// changing this entity, re-run the **ObjectBoxGeneratorCommand** plugin
+/// (right-click the project in Xcode, or
+/// `swift package plugin objectbox-generator`).
 // objectbox: entity
-final class PlaidDocumentEntity: Entity, @unchecked Sendable {
+class PlaidDocumentEntity {
+    // objectbox: id
     var id: Id = 0
 
-    /// The document ID used by Plaid (maps to passageId in QueryResult)
-    /// This is the critical bridge between Plaid search results and document metadata
+    /// The document ID used by Plaid (maps to passageId in QueryResult).
+    /// This is the critical bridge between Plaid search results and document metadata.
+    // objectbox: index
     var plaidDocId: Int = 0
 
     /// Human-readable document name (e.g., filename)
@@ -27,6 +39,7 @@ final class PlaidDocumentEntity: Entity, @unchecked Sendable {
     var filePath: String = ""
 
     /// Name of the Plaid index this document belongs to
+    // objectbox: index
     var indexName: String = ""
 
     /// Unix timestamp when this document was indexed
@@ -38,199 +51,14 @@ final class PlaidDocumentEntity: Entity, @unchecked Sendable {
     required init() {}
 }
 
-// MARK: - ObjectBox Entity Conformances
-
-extension PlaidDocumentEntity: ObjectBox.__EntityRelatable {
-    typealias EntityType = PlaidDocumentEntity
-
-    var _id: EntityId<PlaidDocumentEntity> {
-        EntityId<PlaidDocumentEntity>(self.id)
-    }
-}
-
-extension PlaidDocumentEntity: ObjectBox.EntityInspectable {
-    typealias EntityBindingType = PlaidDocumentEntityBinding
-
-    static var entityInfo = ObjectBox.EntityInfo(name: "PlaidDocumentEntity", id: 1)
-    static var entityBinding = EntityBindingType()
-
-    fileprivate static func buildEntity(modelBuilder: ObjectBox.ModelBuilder) throws {
-        let entityBuilder = try modelBuilder.entityBuilder(
-            for: PlaidDocumentEntity.self, id: 1, uid: 5001
-        )
-        try entityBuilder.addProperty(
-            name: "id", type: PropertyType.long, flags: [.id], id: 1, uid: 5101
-        )
-        try entityBuilder.addProperty(
-            name: "plaidDocId", type: PropertyType.int, flags: [.indexed], id: 2, uid: 5102,
-            indexId: 1, indexUid: 6001
-        )
-        try entityBuilder.addProperty(
-            name: "documentName", type: PropertyType.string, id: 3, uid: 5103
-        )
-        try entityBuilder.addProperty(
-            name: "chunkText", type: PropertyType.string, id: 4, uid: 5104
-        )
-        try entityBuilder.addProperty(
-            name: "chunkIndex", type: PropertyType.int, id: 5, uid: 5105
-        )
-        try entityBuilder.addProperty(
-            name: "filePath", type: PropertyType.string, id: 6, uid: 5106
-        )
-        try entityBuilder.addProperty(
-            name: "indexName", type: PropertyType.string, flags: [.indexed], id: 7, uid: 5107,
-            indexId: 2, indexUid: 6002
-        )
-        try entityBuilder.addProperty(
-            name: "createdAt", type: PropertyType.long, id: 8, uid: 5108
-        )
-        try entityBuilder.addProperty(
-            name: "metadataJson", type: PropertyType.string, id: 9, uid: 5109
-        )
-        try entityBuilder.lastProperty(id: 9, uid: 5109)
-    }
-}
-
-extension PlaidDocumentEntity {
-    fileprivate func __setId(identifier: ObjectBox.Id) {
-        self.id = identifier
-    }
-}
-
-// MARK: - Property Definitions for Queries
-
-extension PlaidDocumentEntity {
-    static var id: Property<PlaidDocumentEntity, Id, Id> {
-        Property<PlaidDocumentEntity, Id, Id>(propertyId: 1, isPrimaryKey: true)
-    }
-    static var plaidDocId: Property<PlaidDocumentEntity, Int, Void> {
-        Property<PlaidDocumentEntity, Int, Void>(propertyId: 2, isPrimaryKey: false)
-    }
-    static var documentName: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 3, isPrimaryKey: false)
-    }
-    static var chunkText: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 4, isPrimaryKey: false)
-    }
-    static var chunkIndex: Property<PlaidDocumentEntity, Int, Void> {
-        Property<PlaidDocumentEntity, Int, Void>(propertyId: 5, isPrimaryKey: false)
-    }
-    static var filePath: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 6, isPrimaryKey: false)
-    }
-    static var indexName: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 7, isPrimaryKey: false)
-    }
-    static var createdAt: Property<PlaidDocumentEntity, Int64, Void> {
-        Property<PlaidDocumentEntity, Int64, Void>(propertyId: 8, isPrimaryKey: false)
-    }
-    static var metadataJson: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 9, isPrimaryKey: false)
-    }
-}
-
-extension ObjectBox.Property where E == PlaidDocumentEntity {
-    static var id: Property<PlaidDocumentEntity, Id, Id> {
-        Property<PlaidDocumentEntity, Id, Id>(propertyId: 1, isPrimaryKey: true)
-    }
-    static var plaidDocId: Property<PlaidDocumentEntity, Int, Void> {
-        Property<PlaidDocumentEntity, Int, Void>(propertyId: 2, isPrimaryKey: false)
-    }
-    static var documentName: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 3, isPrimaryKey: false)
-    }
-    static var chunkText: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 4, isPrimaryKey: false)
-    }
-    static var chunkIndex: Property<PlaidDocumentEntity, Int, Void> {
-        Property<PlaidDocumentEntity, Int, Void>(propertyId: 5, isPrimaryKey: false)
-    }
-    static var filePath: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 6, isPrimaryKey: false)
-    }
-    static var indexName: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 7, isPrimaryKey: false)
-    }
-    static var createdAt: Property<PlaidDocumentEntity, Int64, Void> {
-        Property<PlaidDocumentEntity, Int64, Void>(propertyId: 8, isPrimaryKey: false)
-    }
-    static var metadataJson: Property<PlaidDocumentEntity, String, Void> {
-        Property<PlaidDocumentEntity, String, Void>(propertyId: 9, isPrimaryKey: false)
-    }
-}
-
-// MARK: - Entity Binding
-
-final class PlaidDocumentEntityBinding: ObjectBox.EntityBinding, Sendable {
-    typealias EntityType = PlaidDocumentEntity
-    typealias IdType = Id
-
-    required init() {}
-
-    func generatorBindingVersion() -> Int { 1 }
-
-    func setEntityIdUnlessStruct(of entity: EntityType, to entityId: ObjectBox.Id) {
-        entity.__setId(identifier: entityId)
-    }
-
-    func entityId(of entity: EntityType) -> ObjectBox.Id {
-        entity.id
-    }
-
-    func collect(
-        fromEntity entity: EntityType, id: ObjectBox.Id,
-        propertyCollector: ObjectBox.FlatBufferBuilder,
-        store: ObjectBox.Store
-    ) throws {
-        let offsetDocumentName = propertyCollector.prepare(string: entity.documentName)
-        let offsetChunkText = propertyCollector.prepare(string: entity.chunkText)
-        let offsetFilePath = propertyCollector.prepare(string: entity.filePath)
-        let offsetIndexName = propertyCollector.prepare(string: entity.indexName)
-        let offsetMetadataJson = propertyCollector.prepare(string: entity.metadataJson)
-
-        propertyCollector.collect(id, at: 2 + 2 * 1)
-        propertyCollector.collect(entity.plaidDocId, at: 2 + 2 * 2)
-        propertyCollector.collect(dataOffset: offsetDocumentName, at: 2 + 2 * 3)
-        propertyCollector.collect(dataOffset: offsetChunkText, at: 2 + 2 * 4)
-        propertyCollector.collect(entity.chunkIndex, at: 2 + 2 * 5)
-        propertyCollector.collect(dataOffset: offsetFilePath, at: 2 + 2 * 6)
-        propertyCollector.collect(dataOffset: offsetIndexName, at: 2 + 2 * 7)
-        propertyCollector.collect(entity.createdAt, at: 2 + 2 * 8)
-        propertyCollector.collect(dataOffset: offsetMetadataJson, at: 2 + 2 * 9)
-    }
-
-    func createEntity(
-        entityReader: ObjectBox.FlatBufferReader,
-        store: ObjectBox.Store
-    ) -> EntityType {
-        let entity = PlaidDocumentEntity()
-        entity.id = entityReader.read(at: 2 + 2 * 1)
-        entity.plaidDocId = entityReader.read(at: 2 + 2 * 2)
-        entity.documentName = entityReader.read(at: 2 + 2 * 3)
-        entity.chunkText = entityReader.read(at: 2 + 2 * 4)
-        entity.chunkIndex = entityReader.read(at: 2 + 2 * 5)
-        entity.filePath = entityReader.read(at: 2 + 2 * 6)
-        entity.indexName = entityReader.read(at: 2 + 2 * 7)
-        entity.createdAt = entityReader.read(at: 2 + 2 * 8)
-        entity.metadataJson = entityReader.read(at: 2 + 2 * 9)
-        return entity
-    }
-}
-
-// MARK: - Model Builder
-
-private func plaidDocumentEntityModel() throws -> OpaquePointer {
-    let modelBuilder = try ObjectBox.ModelBuilder()
-    try PlaidDocumentEntity.buildEntity(modelBuilder: modelBuilder)
-    modelBuilder.lastEntity(id: 1, uid: 5001)
-    modelBuilder.lastIndex(id: 2, uid: 6002)
-    return modelBuilder.finish()
-}
-
 // MARK: - ObjectBox Metadata Provider
 
-/// ObjectBox-based implementation of PlaidMetadataProvider
-/// Stores document metadata in an embedded ObjectBox database
+/// ObjectBox-based implementation of `PlaidMetadataProvider`.
+///
+/// Stores document metadata in an embedded ObjectBox database. This lives in the
+/// app (not the `Plaid` package) precisely because storage is a caller concern:
+/// the package only defines the `PlaidMetadataProvider` protocol, so a different
+/// consumer can back it with any store.
 actor ObjectBoxMetadataProvider: PlaidMetadataProvider {
     static let shared = ObjectBoxMetadataProvider()
 
@@ -412,8 +240,10 @@ actor ObjectBoxMetadataProvider: PlaidMetadataProvider {
         }
 
         let directory = try databaseDirectory()
-        let model = try plaidDocumentEntityModel()
-        let store = try Store(model: model, directory: directory.path)
+        // `Store(directoryPath:)` is the generated convenience initializer that
+        // bakes in the entity model; if it's missing ("Missing argument for
+        // parameter 'model'"), run the ObjectBoxGeneratorCommand plugin.
+        let store = try Store(directoryPath: directory.path)
         let box: Box<PlaidDocumentEntity> = store.box(for: PlaidDocumentEntity.self)
 
         self.store = store

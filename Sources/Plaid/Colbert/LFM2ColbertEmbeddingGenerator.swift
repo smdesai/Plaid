@@ -15,7 +15,7 @@ public enum LFM2ColbertGeneratorError: Error, LocalizedError {
     }
 }
 
-public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
+public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator, @unchecked Sendable {
     private let model: MLModel
     private let tokenizer: ColbertTokenizer
     private let skiplistTokenIds: Set<Int>
@@ -183,6 +183,19 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
         isQuery: Bool,
         maxLength: Int
     ) throws -> [ColbertEmbeddingBatch] {
+        let prepared = try prepareInputIdBatches(
+            inputIdBatches, isQuery: isQuery, maxLength: maxLength)
+        return try runPreparedBatch(prepared)
+    }
+
+    /// Build the model inputs for a batch of token-id sequences (CPU-only, no
+    /// inference). Extracted so the encode loop can run this ahead of time on a
+    /// background thread while the GPU works on the previous batch.
+    private func prepareInputIdBatches(
+        _ inputIdBatches: [[Int]],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> PreparedColbertBatch {
         let effectiveLength = min(maxLength, maxSequenceLength)
         let padTokenId =
             isQuery ? tokenizer.queryPadTokenIdentifier : tokenizer.docPadTokenIdentifier
@@ -221,9 +234,27 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
             allAttentionMasks.append(attentionMask)
         }
 
+        return PreparedColbertBatch(
+            batchProvider: MLArrayBatchProvider(array: batchInputs),
+            attentionMasks: allAttentionMasks)
+    }
+
+    public func prepareBatch(
+        for sentences: [String],
+        isQuery: Bool,
+        maxLength: Int
+    ) throws -> PreparedColbertBatch {
+        let inputIdBatches = sentences.map {
+            tokenizer.buildModelTokens(sentence: $0, isQuery: isQuery)
+        }
+        return try prepareInputIdBatches(inputIdBatches, isQuery: isQuery, maxLength: maxLength)
+    }
+
+    public func runPreparedBatch(_ prepared: PreparedColbertBatch) throws -> [ColbertEmbeddingBatch]
+    {
         // Use predictions(from:options:) for batch processing - CoreML handles batching!
-        let batchProvider = MLArrayBatchProvider(array: batchInputs)
-        let predictions = try model.predictions(from: batchProvider, options: MLPredictionOptions())
+        let predictions = try model.predictions(
+            from: prepared.batchProvider, options: MLPredictionOptions())
 
         // Extract embeddings from batch predictions
         var results: [ColbertEmbeddingBatch] = []
@@ -238,9 +269,11 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
                 throw LFM2ColbertGeneratorError.missingOutput("token_embeddings")
             }
 
-            let validTokenCount = max(allAttentionMasks[index].reduce(0, +), 1)
+            let validTokenCount = max(prepared.attentionMasks[index].reduce(0, +), 1)
             let embeddings = Self.extractEmbeddings(from: tokenEmbeddings, limit: validTokenCount)
-            let boolMask = Array(allAttentionMasks[index].prefix(validTokenCount)).map { $0 != 0 }
+            let boolMask = Array(prepared.attentionMasks[index].prefix(validTokenCount)).map {
+                $0 != 0
+            }
 
             results.append(ColbertEmbeddingBatch(embeddings: embeddings, attentionMask: boolMask))
         }
@@ -276,35 +309,6 @@ public final class LFM2ColbertEmbeddingGenerator: ColbertEmbeddingGenerator {
     }
 
     private static func extractEmbeddings(from array: MLMultiArray, limit: Int) -> [[Float]] {
-        let shape = array.shape.map { $0.intValue }
-        guard shape.count >= 2 else { return [] }
-        let embeddingDim = shape.last ?? 0
-        let tokenCount = shape.count >= 2 ? shape[shape.count - 2] : 0
-        let totalTokens = min(tokenCount, limit)
-        var vectors: [[Float]] = []
-        vectors.reserveCapacity(totalTokens)
-
-        for tokenIndex in 0 ..< totalTokens {
-            var vector: [Float] = []
-            vector.reserveCapacity(embeddingDim)
-            for dim in 0 ..< embeddingDim {
-                let flatIndex = tokenIndex * embeddingDim + dim
-                vector.append(array[flatIndex].floatValue)
-            }
-            vectors.append(vector)
-        }
-
-        return vectors
-    }
-}
-
-extension MLMultiArray {
-    fileprivate static func makeInt32Batch(values: [Int]) throws -> MLMultiArray {
-        let shape: [NSNumber] = [1, NSNumber(value: values.count)]
-        let array = try MLMultiArray(shape: shape, dataType: .int32)
-        for (index, value) in values.enumerated() {
-            array[index] = NSNumber(value: value)
-        }
-        return array
+        MLMultiArray.colbertRowMajorFloats(from: array, limit: limit)
     }
 }

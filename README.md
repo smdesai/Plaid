@@ -2,7 +2,7 @@
 
 **Fast, elegant semantic search powered by ColBERT embeddings and optimized indexing.**
 
-Plaid Swift is a native Swift implementation of the Plaid indexing and search system, bringing high-performance semantic search to iOS and macOS applications. Built on MLX for efficient tensor operations and CoreML for on-device embeddings, it enables powerful neural search capabilities without external dependencies.
+Plaid Swift brings high-performance semantic search to iOS and macOS applications. The vector engine is the Rust [`next-plaid`](https://github.com/smdesai/next-plaid) implementation, linked in as a prebuilt UniFFI XCFramework (`NextPlaidFFI.xcframework`); embedding and tokenization stay in Swift, running on-device via CoreML. This split keeps indexing and search fast and memory-bounded while the encoder runs on the Apple Neural Engine / GPU.
 
 ## Features
 
@@ -11,7 +11,7 @@ Plaid Swift is a native Swift implementation of the Plaid indexing and search sy
 - 📦 **Compact Indexes** - Product quantization with 1-8 bit compression
 - 🔄 **Intelligent Chunking** - Automatic handling of large documents with overlap
 - 🔍 **Embedding Retrieval** - Extract decompressed token embeddings from indexed documents
-- 💻 **Native Swift** - No Python or PyTorch dependencies
+- ⚙️ **Rust Vector Engine** - Indexing and search run in the `next-plaid` engine via a UniFFI XCFramework; no Python or PyTorch at runtime
 - 📱 **iOS & macOS** - Runs on-device with CoreML acceleration
 - 🎯 **Easy CLI** - Index and search from the command line
 - 🔧 **Flexible API** - Use as a library in your Swift projects
@@ -21,15 +21,15 @@ Plaid Swift is a native Swift implementation of the Plaid indexing and search sy
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/plaid-swift.git
-cd plaid-swift
+git clone https://github.com/smdesai/Plaid.git
+cd Plaid
 swift build
 ```
 
 Requires:
 - **Swift 5.9+**
-- **macOS 13.3+** or **iOS 17+**
-- MLX Swift (fetched automatically by SwiftPM)
+- **macOS 13.3+** or **iOS 17+** (Apple Silicon)
+- `NextPlaidFFI.xcframework` (the Rust engine) — vendored under `Frameworks/` and linked automatically by SwiftPM as a binary target; the Accelerate framework is linked for CPU math
 
 ---
 
@@ -85,6 +85,8 @@ let config = ColbertModel.Configuration(embeddingDimension: 64, ...)
 
 Index your documents with ColBERT embeddings:
 
+All indexing and search goes through a `SearchBackend`; the shipping implementation is `RustSearchBackend`, backed by the `next-plaid` engine. Embeddings are passed **raw** (unnormalized) as produced by the CoreML encoder — the backend normalizes each token row to unit L2 before crossing the FFI.
+
 ```swift
 import Plaid
 
@@ -97,17 +99,14 @@ let documents: [[[Float]]] = [
     // ... more documents
 ]
 
-// 2. Generate or provide centroids for quantization
-let centroids: [[Float]] = generateCentroids(embeddingDim: 128, nbits: 2)
-
-// 3. Create the index
-try Plaid.create(
+// 2. Create the index. The engine computes its own quantization
+//    centroids via k-means — no centroids need to be supplied.
+let backend = RustSearchBackend()
+try backend.create(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
-    device: "cpu",
     embeddingDim: 128,
     nbits: 2,                    // Compression: 2^nbits clusters
     embeddings: documents,
-    centroids: centroids,
     batchSize: 64,
     seed: 42
 )
@@ -133,13 +132,13 @@ let searchParams = SearchParameters(
 )
 
 // 3. Search
-let results = try Plaid.loadAndSearch(
+let results = try backend.loadAndSearch(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
-    device: "cpu",
     queries: queries,
     searchParameters: searchParams,
     showProgress: false,
-    preloadIndex: false
+    preloadIndex: false,
+    subset: nil                 // Optional per-query candidate restriction
 )
 
 // 4. Process results
@@ -159,7 +158,7 @@ Once documents are indexed, you can retrieve their full decompressed token-level
 // Retrieve embeddings for a specific document by its ID
 let documentId = 5  // Document IDs are assigned sequentially (0, 1, 2, ...)
 
-let embeddings = try Plaid.getDocumentEmbeddings(
+let embeddings = try backend.getDocumentEmbeddings(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
     documentId: documentId
 )
@@ -189,8 +188,8 @@ for (tokenIdx, tokenEmbedding) in embeddings.enumerated() {
 **Error handling:**
 ```swift
 do {
-    let embeddings = try Plaid.getDocumentEmbeddings(
-        indexPath: "/path/to/index",
+    let embeddings = try backend.getDocumentEmbeddings(
+        indexURL: URL(fileURLWithPath: "/path/to/index"),
         documentId: 999
     )
     print("Retrieved \(embeddings.count) token embeddings")
@@ -201,13 +200,18 @@ do {
 }
 ```
 
-**Path-based convenience API:**
+### Deleting Documents
+
+Remove documents by internal id. The engine compacts survivors, renumbering
+`new = old − count(deletedIds < old)`; `DeleteOutcome.deletedIdsSorted` gives the
+removed set so callers keeping an external id map can replay that transform.
+
 ```swift
-// Use string path instead of URL
-let embeddings = try Plaid.getDocumentEmbeddings(
-    indexPath: "/path/to/index",
-    documentId: 5
+let outcome = try backend.delete(
+    indexURL: URL(fileURLWithPath: "/path/to/index"),
+    subset: [1, 4, 9]
 )
+print("Removed ids: \(outcome.deletedIdsSorted)")
 ```
 
 ### Using ColBERT Embeddings
@@ -278,27 +282,6 @@ let score = try colbert.similarity(query: queryEmbedding, document: docEmbedding
 print("Similarity: \(score)")
 ```
 
-### MLX Integration
-
-When using MLX arrays directly:
-
-```swift
-import MLX
-
-let mlxEmbeddings: [MLXArray] = [...]  // Your embeddings as MLX arrays
-let mlxCentroids = MLXArray(...)       // Centroids as MLX array
-
-try Plaid.create(
-    indexURL: indexURL,
-    device: "cpu",
-    embeddingDim: 128,
-    nbits: 2,
-    embeddings: mlxEmbeddings,     // MLXArray inputs
-    centroids: mlxCentroids,
-    batchSize: 64
-)
-```
-
 ---
 
 ## CLI Usage
@@ -314,7 +297,7 @@ Commands:
   demo         End-to-end demo: create index and search
   update       Add new documents to an existing index
   delete       Remove documents from an existing index
-  quickstart   Test with bundled fixtures
+  remap-test   Offline backend check (no model download): create → search → update → delete
   tokenize     Tokenize text with ColBERT tokenizer
   similarity   Compute similarity between query and document
 
@@ -538,7 +521,7 @@ PlaidCLI demo \
 - **Incremental**: No need to rebuild the entire index
 - **Automatic Encoding**: Documents are automatically encoded with ColBERT
 - **Large Documents**: Automatically chunks documents that exceed token limits
-- **Preserves Settings**: Uses the existing index's quantization settings (nbits, centroids)
+- **Preserves Settings**: Uses the existing index's quantization settings (nbits)
 
 ---
 
@@ -754,15 +737,17 @@ ColBERT score: 12.3456
 
 ---
 
-### `quickstart` Command
+### `remap-test` Command
 
-**Run built-in demo with test fixtures.**
+**Offline end-to-end check of the backend — no model download required.**
 
 ```bash
-PlaidCLI quickstart
+PlaidCLI remap-test
 ```
 
-Loads bundled test data and demonstrates index creation and search.
+Builds a small synthetic index, then exercises create → search → update →
+middle-delete → suffix-delete, asserting that the delete-renumber remap holds.
+Useful for verifying the Rust engine wiring without pulling a Core ML model.
 
 ---
 
@@ -1020,23 +1005,23 @@ PlaidCLI demo --query "..." --files docs/*.txt --model mxbai
 
 ## Index File Structure
 
-When you create an index, Plaid generates these files:
+When you create an index, the `next-plaid` engine writes these files (tensors as
+`.npy`):
 
 ```
 my_index/
 ├── metadata.json             # Index metadata
-├── plaid_index.json          # Index configuration
 ├── plan.json                 # Execution plan
-├── centroids.bin             # Quantization centroids
-├── bucket_cutoffs.bin        # Quantization thresholds
-├── bucket_weights.bin        # Quantization weights
-├── avg_residual.bin          # Average residuals
-├── ivf.bin                   # Inverted file index
-├── ivf_lengths.bin           # IVF partition sizes
-├── chunk_0.codes.bin         # Compressed codes
-├── chunk_0.residuals.bin     # Compressed residuals
-├── chunk_0.metadata.json     # Chunk metadata
-└── doclens.0.json           # Document lengths
+├── centroids.npy             # Quantization centroids
+├── bucket_cutoffs.npy        # Quantization thresholds
+├── bucket_weights.npy        # Quantization weights
+├── avg_residual.npy          # Average residuals
+├── ivf.npy                   # Inverted file index
+├── ivf_lengths.npy           # IVF partition sizes
+├── 0.codes.npy               # Compressed codes (chunk 0)
+├── 0.residuals.npy           # Compressed residuals (chunk 0)
+├── 0.metadata.json           # Chunk metadata
+└── doclens.0.json            # Document lengths
 ```
 
 ---
@@ -1063,8 +1048,11 @@ my_index/
 
 4. **Preloading**: Load index once for multiple searches
    ```swift
-   Plaid.loadAndSearch(..., preloadIndex: true)  // Cache in memory
+   backend.loadAndSearch(..., preloadIndex: true)  // Cache in memory
    ```
+   `RustSearchBackend` also caches live index handles per path, so repeated
+   `loadAndSearch`/`update`/`delete` calls against the same index reuse the
+   open handle.
 
 ---
 
@@ -1077,8 +1065,9 @@ my_index/
 
 ### Dependencies
 
-- [MLX Swift](https://github.com/ml-explore/mlx-swift) - Tensor operations
-- CoreML - On-device inference
+- `NextPlaidFFI.xcframework` - the Rust [`next-plaid`](https://github.com/smdesai/next-plaid) vector engine, exposed via UniFFI and linked as a SwiftPM binary target
+- Accelerate - CPU vector/matrix math
+- CoreML - On-device embedding inference
 - Foundation - Core Swift functionality
 
 All dependencies are managed by Swift Package Manager.
@@ -1089,8 +1078,8 @@ All dependencies are managed by Swift Package Manager.
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/plaid-swift.git
-cd plaid-swift
+git clone https://github.com/smdesai/Plaid.git
+cd Plaid
 
 # Build
 swift build
@@ -1106,7 +1095,7 @@ swift build -c release
 
 ## License
 
-[Your License Here]
+Apache 2.0
 
 ---
 
@@ -1125,4 +1114,4 @@ If you use Plaid Swift in your research, please cite:
 
 ---
 
-**Built with ❤️ using Swift and MLX**
+**Built with ❤️ using Swift and Rust**
