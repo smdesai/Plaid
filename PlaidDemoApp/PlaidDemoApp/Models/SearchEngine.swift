@@ -120,8 +120,8 @@ class SearchEngine: ObservableObject {
             configuration: .init(
                 batchSize: SearchEngine.encodeBatchSize,
                 embeddingDimension: model.embeddingDimension,
-                queryLength: tokenizer.maxSequenceLength,
-                documentLength: tokenizer.maxSequenceLength
+                queryLength: model.querySequenceLength,
+                documentLength: model.documentSequenceLength
             ),
             chunker: chunker
         )

@@ -13,7 +13,7 @@ enum PlaidCLI {
 
     private static let fixturesDirectory: URL = repoRoot.appendingPathComponent(
         "fixtures", isDirectory: true)
-    private static let defaultTokenizerModelId = "LiquidAI/LFM2-ColBERT-350M"
+    private static let defaultTokenizerModelId = "LiquidAI/LFM2.5-ColBERT-350M"
 
     // MARK: - Backend Selection
 
@@ -33,7 +33,7 @@ enum PlaidCLI {
         var modelId: String {
             switch self {
             case .lfm2:
-                return "LiquidAI/LFM2-ColBERT-350M"
+                return "LiquidAI/LFM2.5-ColBERT-350M"
             case .mxbai:
                 return "mixedbread-ai/mxbai-edge-colbert-v0-32m"
             }
@@ -45,6 +45,26 @@ enum PlaidCLI {
                 return 128
             case .mxbai:
                 return 64
+            }
+        }
+
+        /// Fixed query-encoder input length (LFM2.5 query model is `[1, 32]`).
+        var querySequenceLength: Int {
+            switch self {
+            case .lfm2:
+                return 32
+            case .mxbai:
+                return 256
+            }
+        }
+
+        /// Fixed document-encoder input length (LFM2.5 doc model is `[1, 512]`).
+        var documentSequenceLength: Int {
+            switch self {
+            case .lfm2:
+                return 512
+            case .mxbai:
+                return 256
             }
         }
 
@@ -399,8 +419,8 @@ enum PlaidCLI {
             configuration: .init(
                 batchSize: 1,
                 embeddingDimension: model.embeddingDimension,
-                queryLength: tokenizer.maxSequenceLength,
-                documentLength: tokenizer.maxSequenceLength
+                queryLength: model.querySequenceLength,
+                documentLength: model.documentSequenceLength
             ),
             chunker: chunker
         )
@@ -622,8 +642,8 @@ enum PlaidCLI {
             configuration: .init(
                 batchSize: 1,
                 embeddingDimension: model.embeddingDimension,
-                queryLength: tokenizer.maxSequenceLength,
-                documentLength: tokenizer.maxSequenceLength
+                queryLength: model.querySequenceLength,
+                documentLength: model.documentSequenceLength
             ),
             chunker: chunker
         )
@@ -787,8 +807,8 @@ enum PlaidCLI {
             configuration: .init(
                 batchSize: 1,
                 embeddingDimension: model.embeddingDimension,
-                queryLength: tokenizer.maxSequenceLength,
-                documentLength: tokenizer.maxSequenceLength
+                queryLength: model.querySequenceLength,
+                documentLength: model.documentSequenceLength
             ),
             chunker: chunker
         )
@@ -1033,8 +1053,8 @@ enum PlaidCLI {
             generator: generator,
             configuration: .init(
                 embeddingDimension: model.embeddingDimension,
-                queryLength: 32,
-                documentLength: 180
+                queryLength: model.querySequenceLength,
+                documentLength: model.documentSequenceLength
             ),
             chunker: chunker
         )

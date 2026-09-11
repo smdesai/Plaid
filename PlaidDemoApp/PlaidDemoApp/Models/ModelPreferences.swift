@@ -12,7 +12,7 @@ enum ModelType: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .lfm2:
-            return "LFM2-ColBERT"
+            return "LFM2.5-ColBERT"
         case .mxbaiEdge:
             return "MXBAI-Edge"
         }
@@ -70,7 +70,7 @@ enum ModelType: String, Codable, CaseIterable, Identifiable {
     var modelId: String {
         switch self {
         case .lfm2:
-            return "LiquidAI/LFM2-ColBERT-350M"
+            return "LiquidAI/LFM2.5-ColBERT-350M"
         case .mxbaiEdge:
             return "mixedbread-ai/mxbai-edge-colbert-v0-32m"
         }
@@ -83,6 +83,28 @@ enum ModelType: String, Codable, CaseIterable, Identifiable {
             return 128
         case .mxbaiEdge:
             return 64
+        }
+    }
+
+    /// Fixed query-encoder input length. LFM2.5 ships a query encoder with a
+    /// hard `[1, 32]` input shape; MXBAI keeps the tokenizer's default window.
+    var querySequenceLength: Int {
+        switch self {
+        case .lfm2:
+            return 32
+        case .mxbaiEdge:
+            return 256
+        }
+    }
+
+    /// Fixed document-encoder input length. LFM2.5's doc encoder has a hard
+    /// `[1, 512]` input shape; MXBAI keeps the tokenizer's default window.
+    var documentSequenceLength: Int {
+        switch self {
+        case .lfm2:
+            return 512
+        case .mxbaiEdge:
+            return 256
         }
     }
 }

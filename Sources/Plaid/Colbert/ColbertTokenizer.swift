@@ -83,44 +83,41 @@ public class ColbertTokenizer: TokenizerProtocol {
         return tokenizer.encode(text: text, addSpecialTokens: false)
     }
 
-    /// Build model-ready token sequence with special tokens and padding
-    public func buildModelTokens(sentence: String, isQuery: Bool) -> [Int] {
-        var tokens = tokenizeToIds(text: sentence)
-
-        let prefixTokenCount = 2  // Account for [Q] or [D] tokens
-
-        if tokens.count + prefixTokenCount > maxLen {
-            print(
-                "Input sentence is too long \(tokens.count + prefixTokenCount) > \(maxLen), truncating."
-            )
-            tokens = Array(tokens[..<(maxLen - prefixTokenCount)])
-        }
-
-        let paddingCount = maxLen - tokens.count - prefixTokenCount
-
-        let prefixToken = isQuery ? queryTokenId : docTokenId
-        let repeatingTokenId = isQuery ? queryPadTokenId : docPadTokenId
-        let inputTokens: [Int] =
-            [1]
-            + [prefixToken]
-            + tokens
-            + Array(repeating: repeatingTokenId, count: paddingCount)
-
-        return inputTokens
+    /// Build model-ready token sequence with special tokens and padding.
+    ///
+    /// - Parameter sequenceLength: The fixed length the returned sequence is
+    ///   truncated/padded to. Defaults to `maxLen`. Encoders whose Core ML model
+    ///   has a fixed input shape (e.g. LFM2.5's 32-token query / 512-token doc
+    ///   encoders) pass the model's required length here.
+    public func buildModelTokens(
+        sentence: String, isQuery: Bool, sequenceLength: Int? = nil
+    ) -> [Int] {
+        let tokens = tokenizeToIds(text: sentence)
+        return assembleModelTokens(
+            tokens: tokens, isQuery: isQuery, sequenceLength: sequenceLength ?? maxLen)
     }
 
-    /// Build model-ready token sequence from pre-tokenized IDs (performance optimized)
-    /// Skips tokenization and directly adds special tokens and padding
-    public func buildModelTokensFromIds(tokenIds: [Int], isQuery: Bool) -> [Int] {
-        var tokens = tokenIds
+    /// Build model-ready token sequence from pre-tokenized IDs (performance optimized).
+    /// Skips tokenization and directly adds special tokens and padding.
+    public func buildModelTokensFromIds(
+        tokenIds: [Int], isQuery: Bool, sequenceLength: Int? = nil
+    ) -> [Int] {
+        return assembleModelTokens(
+            tokens: tokenIds, isQuery: isQuery, sequenceLength: sequenceLength ?? maxLen)
+    }
+
+    /// Prefix the content tokens with `[BOS]` + `[Q]`/`[D]` and pad (or truncate)
+    /// to exactly `sequenceLength` tokens.
+    private func assembleModelTokens(tokens: [Int], isQuery: Bool, sequenceLength: Int) -> [Int] {
+        var tokens = tokens
 
         let prefixTokenCount = 2  // Account for [BOS] and [Q]/[D] tokens
 
-        if tokens.count + prefixTokenCount > maxLen {
-            tokens = Array(tokens[..<(maxLen - prefixTokenCount)])
+        if tokens.count + prefixTokenCount > sequenceLength {
+            tokens = Array(tokens[..<(sequenceLength - prefixTokenCount)])
         }
 
-        let paddingCount = maxLen - tokens.count - prefixTokenCount
+        let paddingCount = sequenceLength - tokens.count - prefixTokenCount
 
         let prefixToken = isQuery ? queryTokenId : docTokenId
         let repeatingTokenId = isQuery ? queryPadTokenId : docPadTokenId

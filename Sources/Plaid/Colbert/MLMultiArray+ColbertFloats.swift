@@ -13,8 +13,18 @@ import Foundation
 public struct PreparedColbertBatch: @unchecked Sendable {
     let batchProvider: MLArrayBatchProvider
     let attentionMasks: [[Int]]
+    /// Which encoder the prepared inputs target. Dual-model encoders (LFM2.5 has
+    /// separate query/doc Core ML models) use this in `runPreparedBatch` to pick
+    /// the right model; single-model encoders ignore it.
+    let isQuery: Bool
 
     var count: Int { attentionMasks.count }
+
+    init(batchProvider: MLArrayBatchProvider, attentionMasks: [[Int]], isQuery: Bool = false) {
+        self.batchProvider = batchProvider
+        self.attentionMasks = attentionMasks
+        self.isQuery = isQuery
+    }
 }
 
 extension MLMultiArray {

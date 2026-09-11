@@ -39,7 +39,7 @@ final class ToolSearchModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
 
     private let embeddingDimension = 128
-    private let modelId = "LiquidAI/LFM2-ColBERT-350M"
+    private let modelId = "LiquidAI/LFM2.5-ColBERT-350M"
     private let topK = 10
 
     /// Loads the tokenizer + Quant4 model and indexes every tool description.
@@ -52,10 +52,9 @@ final class ToolSearchModel: ObservableObject {
             // Tokenizer is downloaded from Hugging Face on first launch, then cached.
             let tokenizer = try await ColbertTokenizer.from(pretrained: modelId)
 
-            // The Core ML encoder is downloaded from the Hugging Face Hub on first use and
-            // cached. Plaid no longer bundles models; the 4-bit "LFM2ColbertQuant4" variant this
-            // demo used to ship is not published, so the full-precision LFM2Colbert is used.
-            // To go back to Quant4, publish it and pass `repoId:`/`modelName:` here.
+            // The Core ML encoders are downloaded from the Hugging Face Hub on first use and
+            // cached. LFM2.5 ships separate query (`[1, 32]`) and document (`[1, 512]`) encoders;
+            // the generator routes each request to the matching model.
             let generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 
             let model = ColbertModel(
@@ -64,7 +63,7 @@ final class ToolSearchModel: ObservableObject {
                     batchSize: 16,
                     embeddingDimension: embeddingDimension,
                     queryLength: 32,
-                    documentLength: 64
+                    documentLength: 512
                 ),
                 chunker: nil  // descriptions are short — single-pass encode, no chunking
             )
