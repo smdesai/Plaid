@@ -27,7 +27,8 @@ targets: [
     // module `next_plaid_ffiFFI` consumed by NextPlaidBindings.
     .binaryTarget(
         name: "NextPlaidFFI",
-        path: "Frameworks/NextPlaidFFI.xcframework"
+        url: "https://github.com/smdesai/Plaid/releases/download/v2.1.0/NextPlaidFFI.xcframework.zip",
+        checksum: "a17d572a6ef39376a80a2b3c99f2e1d6101eaa3d2fef155aaf393686cc1a1ead"
     ),
     // UniFFI-generated Swift surface over NextPlaidFFI (PlaidIndex, records,
     // FfiError). Regenerated alongside the XCFramework; do not hand-edit.

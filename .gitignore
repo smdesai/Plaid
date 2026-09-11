@@ -44,6 +44,10 @@ Pods/
 # Carthage
 Carthage/Build/
 
+# Prebuilt native FFI framework — consumed via SPM binaryTarget(url:) from a
+# GitHub release, not tracked in git. Rebuild + upload; see Package.swift.
+Frameworks/NextPlaidFFI.xcframework/
+
 # fastlane
 fastlane/report.xml
 fastlane/Preview.html
