@@ -21,7 +21,7 @@ enum PlaidCLI {
     /// `next-plaid` engine. Conforms to `SearchBackend`, so the commands below
     /// are engine-agnostic.
     private static func makeBackend() -> SearchBackend {
-        RustSearchBackend()
+        NextPlaidBackend()
     }
 
     // MARK: - Model Selection

@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Plaid
 
-/// Correctness oracle for `RustSearchBackend`: the engine's approximate
+/// Correctness oracle for `NextPlaidBackend`: the engine's approximate
 /// late-interaction ranking is checked against an **exact brute-force MaxSim CPU
 /// reference** (the ground-truth ColBERT score the engine approximates). Fully
 /// in-process and environment-independent.
@@ -135,7 +135,7 @@ final class SearchBackendParityTests: XCTestCase {
         let dir = tempDir("rust")
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let rust = RustSearchBackend()
+        let rust = NextPlaidBackend()
         try rust.create(
             indexURL: dir, embeddingDim: dim, nbits: nbits,
             embeddings: docs, batchSize: 50_000, seed: 42)

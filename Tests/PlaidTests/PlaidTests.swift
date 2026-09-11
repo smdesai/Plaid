@@ -15,7 +15,7 @@ private struct PythonResult: Decodable {
 ///
 /// The fixtures are generated out-of-tree by a Python script and are **not**
 /// checked in, so this test `XCTSkip`s when they are absent. When present it
-/// builds a `RustSearchBackend` index from `documents.json`, searches it with
+/// builds a `NextPlaidBackend` index from `documents.json`, searches it with
 /// `queries.json`, and checks that the engine's ranking matches Python's
 /// `python_results.json`.
 ///
@@ -67,7 +67,7 @@ final class PlaidTests: XCTestCase {
             .appendingPathComponent("fixture_parity_\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let backend = RustSearchBackend()
+        let backend = NextPlaidBackend()
         try backend.create(
             indexURL: dir, embeddingDim: dim, nbits: 4,
             embeddings: documents, batchSize: 50_000, seed: 42)

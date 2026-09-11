@@ -3,10 +3,10 @@ import XCTest
 
 @testable import Plaid
 
-/// Round-trips the Rust `next-plaid` engine through `RustSearchBackend`:
+/// Round-trips the Rust `next-plaid` engine through `NextPlaidBackend`:
 /// build a tiny index, search, append, delete (with compaction), reconstruct.
 /// Uses one-hot unit vectors so a query along an axis maps to a known doc id.
-final class RustSearchBackendTests: XCTestCase {
+final class NextPlaidBackendTests: XCTestCase {
     private let dim = 64
 
     /// A document whose every token points along `axis` (already unit-L2).
@@ -27,7 +27,7 @@ final class RustSearchBackendTests: XCTestCase {
     }
 
     func testCreateSearchAddDeleteReconstruct() throws {
-        let backend = RustSearchBackend()
+        let backend = NextPlaidBackend()
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
 

@@ -13,7 +13,7 @@ import NextPlaidBindings
 /// Live `PlaidIndex` handles are cached per index path. `add`/`remove` mutate
 /// the cached handle in place (the Rust side reloads under its own lock), so the
 /// cache stays valid across those calls; `create` replaces the handle.
-public final class RustSearchBackend: SearchBackend, @unchecked Sendable {
+public final class NextPlaidBackend: SearchBackend, @unchecked Sendable {
     /// Engine defaults for parameters the Swift `SearchParameters` struct omits.
     private static let defaultCentroidBatchSize: UInt64 = 100_000
     private static let defaultCentroidScoreThreshold: Float = 0.4

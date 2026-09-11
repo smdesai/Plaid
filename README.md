@@ -85,7 +85,7 @@ let config = ColbertModel.Configuration(embeddingDimension: 64, ...)
 
 Index your documents with ColBERT embeddings:
 
-All indexing and search goes through a `SearchBackend`; the shipping implementation is `RustSearchBackend`, backed by the `next-plaid` engine. Embeddings are passed **raw** (unnormalized) as produced by the CoreML encoder — the backend normalizes each token row to unit L2 before crossing the FFI.
+All indexing and search goes through a `SearchBackend`; the shipping implementation is `NextPlaidBackend`, backed by the `next-plaid` engine. Embeddings are passed **raw** (unnormalized) as produced by the CoreML encoder — the backend normalizes each token row to unit L2 before crossing the FFI.
 
 ```swift
 import Plaid
@@ -101,7 +101,7 @@ let documents: [[[Float]]] = [
 
 // 2. Create the index. The engine computes its own quantization
 //    centroids via k-means — no centroids need to be supplied.
-let backend = RustSearchBackend()
+let backend = NextPlaidBackend()
 try backend.create(
     indexURL: URL(fileURLWithPath: "/path/to/index"),
     embeddingDim: 128,
@@ -1050,7 +1050,7 @@ my_index/
    ```swift
    backend.loadAndSearch(..., preloadIndex: true)  // Cache in memory
    ```
-   `RustSearchBackend` also caches live index handles per path, so repeated
+   `NextPlaidBackend` also caches live index handles per path, so repeated
    `loadAndSearch`/`update`/`delete` calls against the same index reuse the
    open handle.
 

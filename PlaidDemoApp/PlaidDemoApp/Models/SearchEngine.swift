@@ -63,7 +63,7 @@ class SearchEngine: ObservableObject {
         return stored > 0 ? stored : defaultResultCount
     }
 
-    init(backend: SearchBackend = RustSearchBackend()) {
+    init(backend: SearchBackend = NextPlaidBackend()) {
         self.backend = backend
 
         // Set up index directory in Application Support
