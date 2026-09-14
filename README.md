@@ -7,7 +7,7 @@ Plaid Swift brings high-performance semantic search to iOS and macOS application
 ## Features
 
 - 🚀 **Fast Neural Search** - ColBERT-style late interaction for accurate semantic matching
-- 🤖 **Dual Model Support** - Choose between LFM2-ColBERT (128-dim) and MXBAI-Edge (64-dim)
+- 🤖 **Dual Model Support** - Choose between LFM2.5-ColBERT (128-dim) and MXBAI-Edge (64-dim)
 - 📦 **Compact Indexes** - Product quantization with 1-8 bit compression
 - 🔄 **Intelligent Chunking** - Automatic handling of large documents with overlap
 - 🔍 **Embedding Retrieval** - Extract decompressed token embeddings from indexed documents
@@ -37,14 +37,14 @@ Requires:
 
 The Core ML encoders are **not** bundled with the package. `LFM2ColbertEmbeddingGenerator.download(tokenizer:)`
 and `MXBAIEdgeColbertEmbeddingGenerator.download(tokenizer:)` fetch them from the Hugging Face Hub
-(`smdesai/LFM2Colbert`, `smdesai/MXBAIEdgeColbert`) on first use and cache them alongside the tokenizers;
+(`smdesai/LFM2.5-ColBERT-350M`, `smdesai/MXBAIEdgeColbert`) on first use and cache them alongside the tokenizers;
 pass `progressHandler:` to observe the download. If you already have a compiled `.mlmodelc` (or an
 `.mlpackage`), use `init(tokenizer:modelURL:)` instead.
 
 Plaid Swift supports two ColBERT embedding models, each optimized for different use cases:
 
-### LFM2-ColBERT (Default)
-- **Model ID**: `LiquidAI/LFM2-ColBERT-350M`
+### LFM2.5-ColBERT (Default)
+- **Model ID**: `LiquidAI/LFM2.5-ColBERT-350M`
 - **Embedding Dimension**: 128
 - **Best For**: Maximum accuracy, research-grade quality
 - **Use Case**: When you need the best possible search quality
@@ -67,7 +67,7 @@ let config = ColbertModel.Configuration(embeddingDimension: 64, ...)
 
 ### Choosing a Model
 
-| Factor | LFM2-ColBERT | MXBAI-Edge |
+| Factor | LFM2.5-ColBERT | MXBAI-Edge |
 |--------|--------------|------------|
 | **Accuracy** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
 | **Speed** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -218,14 +218,14 @@ print("Removed ids: \(outcome.deletedIdsSorted)")
 
 Generate embeddings using the built-in CoreML models:
 
-#### Option 1: LFM2-ColBERT (128-dimensional, default)
+#### Option 1: LFM2.5-ColBERT (128-dimensional, default)
 
 ```swift
 import Plaid
 
 // 1. Load tokenizer and model
 let tokenizer = try await ColbertTokenizer.from(
-    pretrained: "LiquidAI/LFM2-ColBERT-350M"
+    pretrained: "LiquidAI/LFM2.5-ColBERT-350M"
 )
 let generator = try await LFM2ColbertEmbeddingGenerator.download(tokenizer: tokenizer)
 let chunker = TokenSplitter(withTokenizer: tokenizer)
@@ -234,7 +234,7 @@ let chunker = TokenSplitter(withTokenizer: tokenizer)
 let colbert = ColbertModel(
     generator: generator,
     configuration: .init(
-        embeddingDimension: 128,  // LFM2 uses 128-dimensional embeddings
+        embeddingDimension: 128,  // LFM2.5 uses 128-dimensional embeddings
         queryLength: 32,
         documentLength: 180
     ),
@@ -302,7 +302,7 @@ Commands:
   similarity   Compute similarity between query and document
 
 Available Models:
-  lfm2         LFM2-ColBERT (128-dimensional, default)
+  lfm2         LFM2.5-ColBERT (128-dimensional, default)
   mxbai        MXBAI-Edge (64-dimensional, faster)
 ```
 
@@ -311,7 +311,7 @@ Available Models:
 All indexing and search commands support the `--model` flag to choose between models:
 
 ```bash
-# Use LFM2 (default, higher accuracy)
+# Use LFM2.5 (default, higher accuracy)
 PlaidCLI demo --query "..." --files doc.txt --model lfm2
 
 # Use MXBAI (faster, lower memory)
@@ -360,7 +360,7 @@ PlaidCLI demo \
 #### Save Index for Reuse
 
 ```bash
-# Create and save index with LFM2 (default)
+# Create and save index with LFM2.5 (default)
 PlaidCLI demo \
   --query "test query" \
   --files *.txt \
@@ -492,7 +492,7 @@ PlaidCLI demo \
 📂 Index: /Users/you/.plaid/my_knowledge_base
 📄 Documents to add: 3
 
-⚙️  Loading ColBERT model: LiquidAI/LFM2-ColBERT-350M...
+⚙️  Loading ColBERT model: LiquidAI/LFM2.5-ColBERT-350M...
 ✅ Model loaded
 
 📚 Loading and encoding documents...
@@ -679,7 +679,7 @@ PlaidCLI delete -i ~/.plaid/my_index -d 1
 **Tokenize text using the ColBERT tokenizer.**
 
 ```bash
-# Tokenize as query with LFM2 (default)
+# Tokenize as query with LFM2.5 (default)
 PlaidCLI tokenize --query "What is AI?"
 
 # Tokenize as query with MXBAI
@@ -711,7 +711,7 @@ Encoded sequence (with [Q] prefix and padding):
 **Compute ColBERT similarity between a query and document.**
 
 ```bash
-# Compute similarity with LFM2 (default)
+# Compute similarity with LFM2.5 (default)
 PlaidCLI similarity \
   --query "machine learning applications" \
   --doc "Machine learning is used in healthcare, finance, and autonomous vehicles."
@@ -725,7 +725,7 @@ PlaidCLI similarity \
 
 **Output:**
 ```
-Loading tokenizer/model: LiquidAI/LFM2-ColBERT-350M (LFM2-ColBERT (128-dim))
+Loading tokenizer/model: LiquidAI/LFM2.5-ColBERT-350M (LFM2.5-ColBERT (128-dim))
 === query embedding ===
 === document embedding ===
 === similarity ===
@@ -756,7 +756,7 @@ Useful for verifying the Rust engine wiring without pulling a Core ML model.
 ### Index Your Documentation
 
 ```bash
-# Index all markdown files in docs/ with LFM2 (best accuracy)
+# Index all markdown files in docs/ with LFM2.5 (best accuracy)
 PlaidCLI demo \
   --query "authentication setup" \
   --files docs/**/*.md \
@@ -939,7 +939,7 @@ PlaidCLI demo \
 Choose between built-in models or use a custom HuggingFace model:
 
 ```bash
-# Use built-in LFM2 model (128-dim, higher accuracy)
+# Use built-in LFM2.5 model (128-dim, higher accuracy)
 PlaidCLI demo \
   --query "your query" \
   --files docs/*.txt \
@@ -979,7 +979,7 @@ PlaidCLI demo ... --nbits 4   # 16 clusters
 
 Choosing the right model depends on your use case:
 
-#### When to Use LFM2-ColBERT
+#### When to Use LFM2.5-ColBERT
 - ✅ **Production search systems** requiring maximum accuracy
 - ✅ **Q&A systems** where answer quality is critical
 - ✅ **Research applications** needing state-of-the-art performance
