@@ -1697,6 +1697,31 @@ private struct FfiConverterSequenceInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterSequenceTypeEmbeddingMatrix: FfiConverterRustBuffer {
     typealias SwiftType = [EmbeddingMatrix]
 
@@ -1772,6 +1797,64 @@ private struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
         return seq
     }
 }
+/// Number of stored documents in the index's `metadata.db` (0 if none exists).
+public func documentCount(path: String) throws -> UInt64 {
+    return try FfiConverterUInt64.lift(
+        try rustCallWithError(FfiConverterTypeFfiError.lift) {
+            uniffi_next_plaid_ffi_fn_func_document_count(
+                FfiConverterString.lower(path), $0
+            )
+        })
+}
+/// Fetch stored documents for `doc_ids`, as JSON object strings. Results are in
+/// the same order as `doc_ids`; each row carries its `_subset_` (the doc_id).
+/// Ids with no stored row are omitted, so callers should key results by
+/// `_subset_` rather than by position. Returns an empty vec if no store exists.
+public func getDocuments(path: String, docIds: [Int64]) throws -> [String] {
+    return try FfiConverterSequenceString.lift(
+        try rustCallWithError(FfiConverterTypeFfiError.lift) {
+            uniffi_next_plaid_ffi_fn_func_get_documents(
+                FfiConverterString.lower(path),
+                FfiConverterSequenceInt64.lower(docIds), $0
+            )
+        })
+}
+/// Fetch stored documents matching a SQL `WHERE` `condition`, as JSON object
+/// strings. The condition uses `?` placeholders bound, in order, to `params`
+/// (each a JSON scalar string, e.g. `"\"report.txt\""` or `"3"`); it is
+/// validated against the schema's columns and an allowlist grammar, so only
+/// known columns and safe comparison/IN/BETWEEN/NULL operators are permitted.
+/// Rows come back ordered by `_subset_` (the doc_id), each carrying it. Returns
+/// an empty vec if no store exists.
+///
+/// Example: `condition = "documentName = ?"`, `params = ["\"report.txt\""]`
+/// returns every chunk of that document, letting callers resolve a document's
+/// ids without scanning the whole store.
+public func queryDocuments(path: String, condition: String, params: [String]) throws -> [String] {
+    return try FfiConverterSequenceString.lift(
+        try rustCallWithError(FfiConverterTypeFfiError.lift) {
+            uniffi_next_plaid_ffi_fn_func_query_documents(
+                FfiConverterString.lower(path),
+                FfiConverterString.lower(condition),
+                FfiConverterSequenceString.lower(params), $0
+            )
+        })
+}
+/// Store `metadata_json[i]` for document `doc_ids[i]` in the index's
+/// `metadata.db`. Creates the store on first call and appends thereafter, so it
+/// can be invoked once per indexing batch. `doc_ids` must match the ids the
+/// engine assigned (`create`/`add` order, 0,1,2,…) and align 1:1 with
+/// `metadata_json`. Each JSON string must be a JSON object. Returns rows written.
+public func storeDocuments(path: String, docIds: [Int64], metadataJson: [String]) throws -> UInt64 {
+    return try FfiConverterUInt64.lift(
+        try rustCallWithError(FfiConverterTypeFfiError.lift) {
+            uniffi_next_plaid_ffi_fn_func_store_documents(
+                FfiConverterString.lower(path),
+                FfiConverterSequenceInt64.lower(docIds),
+                FfiConverterSequenceString.lower(metadataJson), $0
+            )
+        })
+}
 
 private enum InitializationResult {
     case ok
@@ -1787,6 +1870,18 @@ private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_next_plaid_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if uniffi_next_plaid_ffi_checksum_func_document_count() != 40160 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_next_plaid_ffi_checksum_func_get_documents() != 7716 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_next_plaid_ffi_checksum_func_query_documents() != 56129 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_next_plaid_ffi_checksum_func_store_documents() != 51342 {
+        return InitializationResult.apiChecksumMismatch
     }
     if uniffi_next_plaid_ffi_checksum_method_plaidindex_add() != 40302 {
         return InitializationResult.apiChecksumMismatch

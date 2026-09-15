@@ -9,6 +9,8 @@ public enum PlaidError: Error, LocalizedError {
     case indexNotFound(URL)
     case invalidSubset(String)
     case invalidDocumentId(Int, totalDocuments: Int)
+    case metadataEncodingFailed
+    case metadataDecodingFailed
 
     public var errorDescription: String? {
         switch self {
@@ -24,6 +26,10 @@ public enum PlaidError: Error, LocalizedError {
             return "Subset validation failed: \(reason)."
         case .invalidDocumentId(let docId, let totalDocuments):
             return "Document ID \(docId) is out of range. Valid range is 0..<\(totalDocuments)."
+        case .metadataEncodingFailed:
+            return "Failed to encode document metadata to JSON."
+        case .metadataDecodingFailed:
+            return "Failed to decode document metadata from JSON."
         }
     }
 }

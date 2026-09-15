@@ -38,9 +38,6 @@ settings:
 packages:
   Plaid:
     path: ..
-  objectbox-swift-spm:
-    url: https://github.com/objectbox/objectbox-swift-spm.git
-    majorVersion: 5.3.0
 
 targets:
   PlaidDemoApp:
@@ -53,12 +50,9 @@ targets:
         # must not be copied as a bundle resource.
         excludes:
           - Info.plist
-      - path: generated
     dependencies:
       - package: Plaid
         product: Plaid
-      - package: objectbox-swift-spm
-        product: ObjectBox.xcframework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sdesai.PlaidDemoApp2

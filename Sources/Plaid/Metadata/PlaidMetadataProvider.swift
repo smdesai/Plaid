@@ -16,6 +16,11 @@ public struct PlaidDocumentMetadata: Codable, Sendable {
     /// If the document was chunked, which chunk is this (0-indexed)
     public let chunkIndex: Int
 
+    /// Number of token embeddings this chunk contributed to the index. Lets
+    /// callers keep an accurate embedding total across deletes by subtracting
+    /// the exact counts of the removed chunks, instead of estimating.
+    public let embeddingCount: Int
+
     /// Optional original file path
     public let filePath: String?
 
@@ -33,6 +38,7 @@ public struct PlaidDocumentMetadata: Codable, Sendable {
         documentName: String,
         chunkText: String,
         chunkIndex: Int = 0,
+        embeddingCount: Int = 0,
         filePath: String? = nil,
         indexName: String,
         createdAt: Date = Date(),
@@ -42,10 +48,47 @@ public struct PlaidDocumentMetadata: Codable, Sendable {
         self.documentName = documentName
         self.chunkText = chunkText
         self.chunkIndex = chunkIndex
+        self.embeddingCount = embeddingCount
         self.filePath = filePath
         self.indexName = indexName
         self.createdAt = createdAt
         self.metadataJson = metadataJson
+    }
+}
+
+/// A whole indexed document — the aggregate of every chunk that shares a
+/// `documentName`. Used to list what's in the store without exposing per-chunk
+/// rows.
+public struct IndexedDocument: Codable, Sendable, Identifiable, Hashable {
+    public var id: String { documentName }
+
+    /// Human-readable document name (the source filename).
+    public let documentName: String
+
+    /// How many chunks this document was split into.
+    public let chunkCount: Int
+
+    /// Total token embeddings across all of the document's chunks.
+    public let embeddingCount: Int
+
+    /// Original file path, if any chunk recorded one.
+    public let filePath: String?
+
+    /// Earliest `createdAt` across the document's chunks (when it was indexed).
+    public let createdAt: Date
+
+    public init(
+        documentName: String,
+        chunkCount: Int,
+        embeddingCount: Int,
+        filePath: String? = nil,
+        createdAt: Date
+    ) {
+        self.documentName = documentName
+        self.chunkCount = chunkCount
+        self.embeddingCount = embeddingCount
+        self.filePath = filePath
+        self.createdAt = createdAt
     }
 }
 
@@ -116,6 +159,7 @@ public protocol PlaidMetadataProvider: Sendable {
     ///   - documentName: Human-readable name for the document
     ///   - chunkText: The actual text content
     ///   - chunkIndex: Index of chunk within original document (default 0)
+    ///   - embeddingCount: Number of token embeddings this chunk contributed
     ///   - filePath: Optional original file path
     ///   - indexName: Name of the Plaid index
     func registerDocument(
@@ -123,6 +167,7 @@ public protocol PlaidMetadataProvider: Sendable {
         documentName: String,
         chunkText: String,
         chunkIndex: Int,
+        embeddingCount: Int,
         filePath: String?,
         indexName: String
     ) async throws
@@ -134,7 +179,7 @@ public protocol PlaidMetadataProvider: Sendable {
     func registerDocuments(
         _ documents: [(
             plaidDocId: Int, documentName: String, chunkText: String, chunkIndex: Int,
-            filePath: String?
+            embeddingCount: Int, filePath: String?
         )],
         indexName: String
     ) async throws
@@ -146,6 +191,23 @@ public protocol PlaidMetadataProvider: Sendable {
 
     /// Get metadata for multiple documents (preserves order of input IDs)
     func getDocuments(plaidDocIds: [Int], indexName: String) async throws -> [PlaidDocumentMetadata]
+
+    /// Fetch every stored chunk belonging to a document, identified by its
+    /// `documentName`, ordered by `plaidDocId`. Lets callers act on a whole
+    /// document (e.g. delete it) without scanning the entire store.
+    ///
+    /// This is a required requirement — deliberately no default — so every
+    /// conformer commits to a real filter (e.g. a `WHERE documentName = ?`
+    /// pushed into the store) rather than silently inheriting an O(corpus)
+    /// scan. See `NextPlaidMetadataProvider.documentChunks` for the SQLite path.
+    func documentChunks(named documentName: String, indexName: String) async throws
+        -> [PlaidDocumentMetadata]
+
+    /// List every distinct document in the store — one `IndexedDocument` per
+    /// `documentName` — with its chunk and embedding totals, ordered by name.
+    /// Enumerating the whole store is inherently O(corpus); conformers should
+    /// implement it as efficiently as their backend allows.
+    func indexedDocuments(indexName: String) async throws -> [IndexedDocument]
 
     // MARK: - Management
 

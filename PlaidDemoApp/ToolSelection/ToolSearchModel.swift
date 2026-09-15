@@ -18,7 +18,7 @@ struct ToolMatch: Identifiable {
 /// late-interaction (MaxSim) against that index.
 ///
 /// The corpus is small (151 short descriptions) so there is no need for the on-disk
-/// Plaid IVF index or ObjectBox used by the main demo app — everything stays in memory.
+/// Plaid IVF index or SQLite store used by the main demo app — everything stays in memory.
 @MainActor
 final class ToolSearchModel: ObservableObject {
     enum Phase: Equatable {

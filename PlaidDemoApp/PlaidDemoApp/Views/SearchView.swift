@@ -12,13 +12,14 @@ struct SearchView: View {
     @State private var isSearching = false
     @State private var selectedResult: SearchResult?
     @State private var showSettings = false
+    @State private var showDocuments = false
     @State private var showDirectoryPicker = false
     @AppStorage(SearchEngine.resultCountKey) private var resultCount: Int =
         SearchEngine.defaultResultCount
 
     /// Whether search is enabled (has indexed data)
     private var isSearchEnabled: Bool {
-        searchEngine.indexState != nil && (searchEngine.indexState?.totalDocuments ?? 0) > 0
+        searchEngine.hasSearchableContent
     }
 
     var body: some View {
@@ -152,6 +153,20 @@ struct SearchView: View {
                                     .onTapGesture {
                                         selectedResult = result
                                     }
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            deleteResult(result)
+                                        } label: {
+                                            Label("Delete Chunk", systemImage: "trash")
+                                        }
+                                        Button(role: .destructive) {
+                                            deleteDocument(result)
+                                        } label: {
+                                            Label(
+                                                "Delete Entire Document",
+                                                systemImage: "trash.fill")
+                                        }
+                                    }
                             }
                         }
                         .padding()
@@ -168,6 +183,14 @@ struct SearchView: View {
                             .font(.body)
                             .foregroundColor(searchEngine.isIndexing ? .gray : .blue)
                         }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showDocuments = true }) {
+                            Image(systemName: "list.bullet.rectangle")
+                            .font(.body)
+                            .foregroundColor(isSearchEnabled ? .blue : .gray)
+                        }
+                        .disabled(!isSearchEnabled)
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { showSettings = true }) {
@@ -189,6 +212,12 @@ struct SearchView: View {
                         }
                     }
                     ToolbarItem(placement: .automatic) {
+                        Button(action: { showDocuments = true }) {
+                            Image(systemName: "list.bullet.rectangle")
+                        }
+                        .disabled(!isSearchEnabled)
+                    }
+                    ToolbarItem(placement: .automatic) {
                         Button(action: { showSettings = true }) {
                             Image(systemName: "gearshape")
                         }
@@ -203,6 +232,13 @@ struct SearchView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(searchEngine: searchEngine)
+            }
+            .sheet(isPresented: $showDocuments) {
+                // Deleting a document from the list re-sequences ids, so drop any
+                // shown results to avoid a stale hit resolving to the wrong text.
+                IndexedDocumentsView(searchEngine: searchEngine) {
+                    searchResults = []
+                }
             }
             .fileImporter(
                 isPresented: $showDirectoryPicker,
@@ -386,6 +422,43 @@ struct SearchView: View {
         #else
             .background(Color.white)
         #endif
+    }
+
+    /// Delete a single chunk from the index. Deletion re-sequences every
+    /// surviving `doc_id`, so the current result ids go stale — re-run the
+    /// search afterward to show correct text/ids (or clear if nothing is left).
+    private func deleteResult(_ result: SearchResult) {
+        performDelete { try await searchEngine.deleteDocuments(plaidDocIds: [result.documentId]) }
+    }
+
+    /// Delete every chunk of the document this result belongs to (grouped by
+    /// filename). Ids renumber afterward, so re-run the search to refresh.
+    private func deleteDocument(_ result: SearchResult) {
+        performDelete { try await searchEngine.deleteDocument(named: result.filename) }
+    }
+
+    /// Run a delete off the main actor, then refresh the visible results:
+    /// re-run the search if anything is still indexed, else clear the list.
+    /// Any failure surfaces on `searchEngine.errorMessage`. Both delete
+    /// affordances share this shape, so it lives in one place.
+    private func performDelete(_ delete: @escaping () async throws -> Int) {
+        Task {
+            do {
+                _ = try await delete()
+                await MainActor.run {
+                    if searchEngine.hasSearchableContent {
+                        performSearch()
+                    } else {
+                        searchResults = []
+                    }
+                }
+            } catch {
+                print("❌ Delete error: \(error)")
+                await MainActor.run {
+                    searchEngine.errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func performSearch() {

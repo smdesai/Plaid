@@ -81,23 +81,50 @@ struct SettingsView: View {
                         .background(Color(.secondarySystemGroupedBackground))
                         .cornerRadius(12)
 
-                        // Warning banner if model changed
+                        // Warning banner + apply action if the model changed.
+                        // Embeddings are model-specific, so switching drops the
+                        // existing index; the user re-indexes with the new model.
                         if hasModelChanged {
-                            HStack(spacing: 12) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.orange)
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Re-indexing Required")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Re-indexing Required")
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
 
-                                    Text("Changing models requires rebuilding the index")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        Text("Switching models rebuilds the index")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
                                 }
 
-                                Spacer()
+                                Button(action: { applyModelChange() }) {
+                                    HStack {
+                                        if isDeleting {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        } else {
+                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                        }
+                                        Text(
+                                            searchEngine.hasIndex
+                                                ? "Switch Model & Clear Index"
+                                                : "Switch Model"
+                                        )
+                                        .fontWeight(.semibold)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(isDeleting)
                             }
                             .padding()
                             .background(Color.orange.opacity(0.1))
@@ -336,18 +363,41 @@ struct SettingsView: View {
         return formatter.string(from: date)
     }
 
+    /// Delete the index via the Danger Zone. This does exactly one thing —
+    /// wipe the index; switching models is a separate action (see
+    /// `applyModelChange`), reached through its own "Switch Model" control.
     private func deleteIndex() {
-        isDeleting = true
+        runDismissingTask {
+            try await searchEngine.deleteIndex()
+        }
+    }
 
+    /// Switch the engine to `selectedModel`. Embeddings are model-specific, so
+    /// drop the existing index first, then load the new model; the user
+    /// re-indexes afterward. Mirrors the model-load path used at launch.
+    private func applyModelChange() {
+        guard hasModelChanged else { return }
+        let model = selectedModel
+        runDismissingTask {
+            try await searchEngine.deleteIndex()
+            try await searchEngine.initialize(with: model)
+        }
+    }
+
+    /// Run a mutating engine action off the main actor while showing the
+    /// deleting spinner, then dismiss on success or surface the error. Both
+    /// Danger-Zone actions share this shape, so it lives in one place.
+    private func runDismissingTask(_ work: @escaping () async throws -> Void) {
+        isDeleting = true
         Task {
             do {
-                try await searchEngine.deleteIndex()
+                try await work()
                 await MainActor.run {
                     isDeleting = false
                     dismiss()
                 }
             } catch {
-                print("❌ Error deleting index: \(error)")
+                print("❌ Settings action error: \(error)")
                 await MainActor.run {
                     searchEngine.errorMessage = error.localizedDescription
                     isDeleting = false

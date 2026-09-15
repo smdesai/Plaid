@@ -17,10 +17,13 @@ class SearchEngine: ObservableObject {
     private var tokenizer: ColbertTokenizer?
     private var colbert: ColbertModel?
 
-    /// ObjectBox metadata provider for document storage
-    private let metadataProvider = ObjectBoxMetadataProvider.shared
+    /// Per-chunk text store, tying each vector `doc_id` to its text. Backed by
+    /// the SQLite `metadata.db` inside `indexURL` (via `NextPlaidFFI`). Injected
+    /// like `backend` for testability; the default builds a
+    /// `NextPlaidMetadataProvider` once `indexURL` is resolved.
+    private let metadataProvider: any PlaidMetadataProvider
 
-    /// Index name for ObjectBox metadata
+    /// Index name for the metadata store (the app is 1:1 on a single index).
     private let indexName = "default"
 
     private var embeddingDim: Int = 128  // Will be set based on model
@@ -63,7 +66,17 @@ class SearchEngine: ObservableObject {
         return stored > 0 ? stored : defaultResultCount
     }
 
-    init(backend: SearchBackend = NextPlaidBackend()) {
+    /// - Parameters:
+    ///   - backend: vector-search engine seam (defaults to the Rust engine).
+    ///   - metadataProvider: factory for the per-chunk text store, given the
+    ///     resolved `indexURL`. Defaults to the SQLite-backed
+    ///     `NextPlaidMetadataProvider`; injectable so tests can substitute one.
+    init(
+        backend: SearchBackend = NextPlaidBackend(),
+        metadataProvider: (URL) -> any PlaidMetadataProvider = {
+            NextPlaidMetadataProvider(indexURL: $0)
+        }
+    ) {
         self.backend = backend
 
         // Set up index directory in Application Support
@@ -79,6 +92,15 @@ class SearchEngine: ObservableObject {
             at: indexURL,
             withIntermediateDirectories: true
         )
+
+        self.metadataProvider = metadataProvider(indexURL)
+    }
+
+    /// Whether the index currently holds searchable chunks. Views gate their
+    /// search UI and decide whether to refresh or clear results after a delete
+    /// on this, rather than reaching into `indexState`'s counters directly.
+    var hasSearchableContent: Bool {
+        (indexState?.totalDocuments ?? 0) > 0
     }
 
     /// Initialize the ColBERT model with specified model type
@@ -221,9 +243,9 @@ class SearchEngine: ObservableObject {
                 }
             )
 
-            // ObjectBox is the source of truth for per-chunk metadata, so the
-            // persisted state carries only the summary — keeping this dict empty
-            // avoids holding every chunk's text for the whole corpus in RAM.
+            // The SQLite metadata store is the source of truth for per-chunk
+            // text, so the persisted state carries only the summary — keeping
+            // this dict empty avoids holding every chunk's text in RAM.
             self.indexState = IndexState(
                 documents: [:],
                 createdAt: Date(),
@@ -256,7 +278,7 @@ class SearchEngine: ObservableObject {
     ///  - **Consumer (indexer):** dequeues batches FIFO, assigns the running
     ///    `plaidDocId` (so ids stay contiguous and in lockstep with the
     ///    `create`/`update` order), builds the index (Rust FFI, CPU) and writes
-    ///    ObjectBox metadata.
+    ///    the per-chunk text to the SQLite metadata store.
     ///
     /// Overlapping the two stages lets ANE/GPU encoding run while the previous
     /// batch is quantized + written to disk. Streaming keeps peak memory bounded:
@@ -267,7 +289,7 @@ class SearchEngine: ObservableObject {
         documents: [Document],
         colbert: ColbertModel,
         backend: SearchBackend,
-        metadataProvider: ObjectBoxMetadataProvider,
+        metadataProvider: any PlaidMetadataProvider,
         indexURL: URL,
         indexName: String,
         embeddingDim: Int,
@@ -360,7 +382,7 @@ class SearchEngine: ObservableObject {
                         var metadata:
                             [(
                                 plaidDocId: Int, documentName: String, chunkText: String,
-                                chunkIndex: Int, filePath: String?
+                                chunkIndex: Int, embeddingCount: Int, filePath: String?
                             )] = []
                         metadata.reserveCapacity(batch.count)
                         for item in batch {
@@ -370,6 +392,7 @@ class SearchEngine: ObservableObject {
                                     documentName: item.documentName,
                                     chunkText: item.text,
                                     chunkIndex: item.chunkIndex,
+                                    embeddingCount: item.embeddings.count,
                                     filePath: nil
                                 ))
                             currentPlaidDocId += 1
@@ -684,9 +707,10 @@ class SearchEngine: ObservableObject {
             print("  ✅ Index directory removed")
         }
 
-        // Delete ObjectBox metadata for this index
+        // Removing the directory already took `metadata.db` with it; this is a
+        // defensive no-op that keeps the provider seam honest.
         try await metadataProvider.deleteIndex(indexName: indexName)
-        print("  ✅ ObjectBox metadata deleted")
+        print("  ✅ Metadata store deleted")
 
         // Recreate empty directory
         try FileManager.default.createDirectory(
@@ -701,5 +725,105 @@ class SearchEngine: ObservableObject {
         }
 
         print("✅ Index deleted successfully")
+    }
+
+    /// Delete specific chunks (by their current Plaid `doc_id`) from the index.
+    ///
+    /// `backend.delete` re-sequences the vectors AND the co-located SQLite
+    /// metadata with the identical `new_id = old_id − count(deleted < old_id)`
+    /// rule, so surviving text stays tied to its embedding. Callers must re-run
+    /// their search afterward: every id at or above a deleted id shifts down.
+    ///
+    /// Returns the number of chunks actually removed.
+    @discardableResult
+    func deleteDocuments(plaidDocIds: [Int]) async throws -> Int {
+        guard !plaidDocIds.isEmpty else { return 0 }
+        guard let state = indexState else { throw SearchEngineError.noIndex }
+
+        // A 0-document index is not a valid state for the engine: `create`
+        // rejects an empty corpus, and emptying an index via delete fails when it
+        // reloads ("No data to merge"). So removing every remaining chunk means
+        // deleting the index itself, not emptying it. Restrict the targets to the
+        // live corpus (in-range, unique) and compare against the authoritative
+        // store count; a full wipe routes to `deleteIndex()`.
+        let currentCount = try await metadataProvider.documentCount(indexName: indexName)
+        let targets = Set(plaidDocIds.filter { $0 >= 0 && $0 < currentCount })
+        guard !targets.isEmpty else { return 0 }
+
+        if targets.count >= currentCount {
+            print("🗑️ Deleting all \(targets.count) chunk(s) — removing the index")
+            try await deleteIndex()
+            return targets.count
+        }
+
+        print("🗑️ Deleting \(plaidDocIds.count) chunk(s): \(plaidDocIds.sorted())")
+
+        // Capture the embedding counts of the chunks we're about to remove
+        // *before* deleting — once the rows are gone and ids renumber, the exact
+        // per-chunk counts are unrecoverable. Summing these gives a truthful
+        // post-delete embedding total instead of a proportional estimate.
+        let doomed = try await metadataProvider.getDocuments(
+            plaidDocIds: plaidDocIds, indexName: indexName)
+        let embeddingCountById = Dictionary(
+            doomed.map { ($0.plaidDocId, $0.embeddingCount) },
+            uniquingKeysWith: { first, _ in first })
+
+        let outcome = try backend.delete(indexURL: indexURL, subset: plaidDocIds)
+        let deletedCount = outcome.deletedIdsSorted.count
+        guard deletedCount > 0 else { return 0 }
+
+        // Reconcile the persisted summary with the store's authoritative
+        // post-renumber chunk count, and subtract the exact embeddings removed.
+        let removedEmbeddings = outcome.deletedIdsSorted.reduce(0) {
+            $0 + (embeddingCountById[$1] ?? 0)
+        }
+        let remainingChunks = try await metadataProvider.documentCount(indexName: indexName)
+        let remainingEmbeddings = max(0, state.totalEmbeddings - removedEmbeddings)
+        indexState = IndexState(
+            documents: state.documents,
+            createdAt: state.createdAt,
+            lastModified: Date(),
+            totalDocuments: remainingChunks,
+            totalEmbeddings: remainingChunks == 0 ? 0 : remainingEmbeddings
+        )
+        hasIndex = remainingChunks > 0
+        try saveIndexState()
+
+        print("  ✅ Deleted \(deletedCount) chunk(s); \(remainingChunks) remaining")
+        return deletedCount
+    }
+
+    /// Delete every chunk belonging to a document, grouped by `documentName`
+    /// (the source filename). A document is chunked into many `plaidDocId`s at
+    /// index time; this collects them all and deletes them in one renumbering
+    /// pass. Returns the number of chunks removed.
+    @discardableResult
+    func deleteDocument(named documentName: String) async throws -> Int {
+        guard indexState != nil else { throw SearchEngineError.noIndex }
+
+        let ids = try await chunkIds(forDocumentNamed: documentName)
+        guard !ids.isEmpty else {
+            print("🗑️ No chunks found for document '\(documentName)'")
+            return 0
+        }
+
+        print("🗑️ Deleting document '\(documentName)' (\(ids.count) chunk(s))")
+        return try await deleteDocuments(plaidDocIds: ids)
+    }
+
+    /// Every distinct document currently in the store, one entry per source
+    /// filename, with its chunk and embedding totals. Backs the "indexed
+    /// documents" browser in the UI.
+    func indexedDocuments() async throws -> [IndexedDocument] {
+        try await metadataProvider.indexedDocuments(indexName: indexName)
+    }
+
+    /// The current Plaid `doc_id`s of every chunk whose `documentName` matches.
+    /// The provider pushes this filter into SQLite (see
+    /// `NextPlaidMetadataProvider.documentChunks`), so no full-store scan.
+    private func chunkIds(forDocumentNamed documentName: String) async throws -> [Int] {
+        let chunks = try await metadataProvider.documentChunks(
+            named: documentName, indexName: indexName)
+        return chunks.map { $0.plaidDocId }
     }
 }
