@@ -28,8 +28,8 @@ let package = Package(
         .binaryTarget(
             name: "NextPlaidFFI",
             url:
-                "https://github.com/smdesai/Plaid/releases/download/v2.1.0/NextPlaidFFI.xcframework.zip",
-            checksum: "a17d572a6ef39376a80a2b3c99f2e1d6101eaa3d2fef155aaf393686cc1a1ead"
+                "https://github.com/smdesai/Plaid/releases/download/v2.1.1/NextPlaidFFI.xcframework.zip",
+            checksum: "6ec838f4b756a09996c9834a923a4e9014273f80f3314dbe1bc74475c5e53ee3"
         ),
         // UniFFI-generated Swift surface over NextPlaidFFI (PlaidIndex, records,
         // FfiError). Regenerated alongside the XCFramework; do not hand-edit.
